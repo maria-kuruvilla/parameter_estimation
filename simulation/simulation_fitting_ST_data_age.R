@@ -326,39 +326,39 @@ ric_data$generating_model <- "Ricker"
 data <- NULL
 
 
-
-for(i in 1:nsims){
-  
-  set.seed(12345+i)
-  bh_data <- bh_function_w_age(mean_harvest = 0.3, 
-                               sd_harvest = 0.2, 
-                               K_max = 10000, 
-                               alpha_mean = 1.5, 
-                               sigma_mean = 1, 
-                               ages = chum_ages, 
-                               p_mean = chum_p_mean)
-  
-  bh_data$generating_model <- "Beverton-Holt"
-  bh_data$sim <- i
-  
-  ric_data <- ric_function_w_age(mean_harvest = 0.3, 
-                                 sd_harvest = 0.2, 
-                                 K_max = 10000, 
-                                 alpha_mean = 1.5, 
-                                 sigma_mean = 1, 
-                                 ages = chum_ages, 
-                                 p_mean = chum_p_mean)
-  
-  ric_data$generating_model <- "Ricker"
-  ric_data$sim <- i
-  
-  data <- data %>% 
-    rbind(ric_data %>% filter(!is.nan(ln_RS), !is.infinite(ln_RS))) %>% 
-    rbind(bh_data %>% filter(!is.nan(ln_RS), !is.infinite(ln_RS)))
-  
-  
-}
-
+# 
+# for(i in 1:nsims){
+#   
+#   set.seed(12345+i)
+#   bh_data <- bh_function_w_age(mean_harvest = 0.3, 
+#                                sd_harvest = 0.2, 
+#                                K_max = 10000, 
+#                                alpha_mean = 1.5, 
+#                                sigma_mean = 1, 
+#                                ages = chum_ages, 
+#                                p_mean = chum_p_mean)
+#   
+#   bh_data$generating_model <- "Beverton-Holt"
+#   bh_data$sim <- i
+#   
+#   ric_data <- ric_function_w_age(mean_harvest = 0.3, 
+#                                  sd_harvest = 0.2, 
+#                                  K_max = 10000, 
+#                                  alpha_mean = 1.5, 
+#                                  sigma_mean = 1, 
+#                                  ages = chum_ages, 
+#                                  p_mean = chum_p_mean)
+#   
+#   ric_data$generating_model <- "Ricker"
+#   ric_data$sim <- i
+#   
+#   data <- data %>% 
+#     rbind(ric_data %>% filter(!is.nan(ln_RS), !is.infinite(ln_RS))) %>% 
+#     rbind(bh_data %>% filter(!is.nan(ln_RS), !is.infinite(ln_RS)))
+#   
+#   
+# }
+# 
 
 generating_model <- c("Beverton-Holt", "Ricker")
 fitting_model <- c("Beverton-Holt", "Ricker")
@@ -392,7 +392,7 @@ nsims <- 500
 
 for(i in 1:nsims){
   
-  
+  set.seed(12345+i)
   model <- sample(generating_model, 1)
   
   if(model == "Beverton-Holt"){
@@ -449,7 +449,7 @@ for(i in 1:nsims){
   for(fit_model in fitting_model){
     
     
-    set.seed(i)
+    set.seed(12345+i)
     
     
     
