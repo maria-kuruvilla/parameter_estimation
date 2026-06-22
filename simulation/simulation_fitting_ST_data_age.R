@@ -4,6 +4,18 @@
 # first simulate multiple datasets with the same parameters and keep track of estimated medians
 # then simulate multiple datasets with different parameters and keep track of estimated medians
 
+if(Sys.info()[1] == "Windows") {
+  print("Running on local machine")
+} else {
+  print("Running on server")
+  .libPaths("/home/mkuruvil/R_Packages")
+  install.packages("PNWColors", lib = "/home/mkuruvil/R_Packages")
+  install.packages("gsl", lib = "/home/mkuruvil/R_Packages")
+  
+}
+
+
+
 library(here)
 library(ggplot2)
 suppressPackageStartupMessages(library(rstan))
@@ -11,6 +23,7 @@ rstan_options("auto_write" = TRUE)
 library(PNWColors)
 library(tidyverse)
 library(gsl)
+
 
 bh_function_w_age <- function(mean_harvest, sd_harvest, K_max, alpha_mean, sigma_mean, ages, p_mean, burn_in = 50, variation = 0.9){
   
@@ -507,7 +520,7 @@ for(i in 1:nsims){
 
 
 
-pal <- PNWColors::pnw_palette("Starfish", 5)
+
 
 
 model_results_w_spawner_combined_df_new <- model_results_w_spawner_combined_df %>% 
@@ -534,46 +547,61 @@ write_csv(model_results_w_spawner_combined_df_new, here("simulation",
 
 
 
-ggplot(model_results_w_spawner_combined_df_new %>% 
-         filter(parameter == "alpha"), aes(x = alpha, y = estimate_median)) +
-  # geom_point(aes(color = alpha),alpha = 0.5, size = 2) +
-  geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = Smsy), size = 0.5, alpha = 0.5)+
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
-  facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
-  labs(x = "True alpha", y = "Estimated alpha") +
-  # scale_color_gradient2(name = 'alpha',
-  #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
-  scale_color_gradientn(name = 'Estimated S_msy',
-                        colors = pal)+
-  theme_classic()
+if(Sys.info()[1] == "Windows") {
+  
+  
+  pal <- PNWColors::pnw_palette("Starfish", 5)
+  
+  ggplot(model_results_w_spawner_combined_df_new %>% 
+           filter(parameter == "alpha"), aes(x = alpha, y = estimate_median)) +
+    # geom_point(aes(color = alpha),alpha = 0.5, size = 2) +
+    geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = Smsy), size = 0.5, alpha = 0.5)+
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
+    labs(x = "True alpha", y = "Estimated alpha") +
+    # scale_color_gradient2(name = 'alpha',
+    #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
+    scale_color_gradientn(name = 'Estimated S_msy',
+                          colors = pal)+
+    theme_classic()
+  
+  ggplot(model_results_w_spawner_combined_df_new %>% 
+           filter(parameter == "K"), aes(x = K, y = estimate_median)) +
+    geom_point(alpha = 0.5, size = 2) +
+    # geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = Smsy), size = 0.5, alpha = 0.5)+
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
+    labs(x = "True K", y = "Estimated K") +
+    scale_x_log10()+
+    scale_y_log10()+
+    # scale_color_gradient2(name = 'alpha',
+    #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
+    scale_color_gradientn(name = 'Estimated S_msy',
+                          colors = pal)+
+    theme_classic()
+  
+  ggplot(model_results_w_spawner_combined_df_new %>% 
+           filter(parameter == "Smsy"), aes(x = Smsy, y = estimate_median)) +
+    # geom_point(aes(color = alpha),alpha = 0.5, size = 2) +
+    geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = alpha), size = 0.5, alpha = 0.5)+
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
+    labs(x = "True Smsy", y = "Estimated Smsy") +
+    # scale_color_gradient2(name = 'alpha',
+    #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
+    scale_color_gradientn(name = 'Estimated alpha',
+                          colors = pal)+
+    theme_classic()
+  
+} else{
+  print("running on server")
+  
+  
+  
+}
 
-ggplot(model_results_w_spawner_combined_df_new %>% 
-         filter(parameter == "K"), aes(x = K, y = estimate_median)) +
-  geom_point(alpha = 0.5, size = 2) +
-  # geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = Smsy), size = 0.5, alpha = 0.5)+
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
-  facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
-  labs(x = "True K", y = "Estimated K") +
-  scale_x_log10()+
-  scale_y_log10()+
-  # scale_color_gradient2(name = 'alpha',
-  #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
-  scale_color_gradientn(name = 'Estimated S_msy',
-                        colors = pal)+
-  theme_classic()
 
-ggplot(model_results_w_spawner_combined_df_new %>% 
-         filter(parameter == "Smsy"), aes(x = Smsy, y = estimate_median)) +
-  # geom_point(aes(color = alpha),alpha = 0.5, size = 2) +
-  geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = alpha), size = 0.5, alpha = 0.5)+
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
-  facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
-  labs(x = "True Smsy", y = "Estimated Smsy") +
-  # scale_color_gradient2(name = 'alpha',
-  #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
-  scale_color_gradientn(name = 'Estimated alpha',
-                        colors = pal)+
-  theme_classic()
+
 
 
 
