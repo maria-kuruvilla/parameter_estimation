@@ -1,28 +1,4 @@
-# simulate bh and ricker data with age structure, then fir the two models to the data
-#estimate the parameters, have K and Smsy in generated quantities
-
-# first simulate multiple datasets with the same parameters and keep track of estimated medians
-# then simulate multiple datasets with different parameters and keep track of estimated medians
-
-if(Sys.info()[1] == "Windows") {
-  print("Running on local machine")
-} else {
-  print("Running on server")
-  .libPaths("/home/mkuruvil/R_Packages")
-  install.packages("PNWColors", lib = "/home/mkuruvil/R_Packages")
-  install.packages("gsl", lib = "/home/mkuruvil/R_Packages")
-  
-}
-
-
-
-library(here)
-library(ggplot2)
-suppressPackageStartupMessages(library(rstan))
-rstan_options("auto_write" = TRUE)
-library(PNWColors)
-library(tidyverse)
-library(gsl)
+# Goal - simulate different data sets with the same parameter 1000 times, then fit models to it
 
 
 bh_function_w_age <- function(mean_harvest, sd_harvest, K_max, alpha_mean, sigma_mean, ages, p_mean, burn_in = 50, variation = 0.9){
@@ -299,66 +275,6 @@ chum_p_mean <- c(0.15, 0.65, 0.18, 0.02)
 ages <- chum_ages
 p_mean <- chum_p_mean
 
-bh_data <- bh_function_w_age(mean_harvest = 0.3, 
-                             sd_harvest = 0.2, 
-                             K_max = 10000, 
-                             alpha_mean = 1.5, 
-                             sigma_mean = 1, 
-                             ages = chum_ages, 
-                             p_mean = chum_p_mean)
-
-bh_data$generating_model <- "Beverton-Holt"
-
-ric_data <- ric_function_w_age(mean_harvest = 0.3, 
-                               sd_harvest = 0.2, 
-                               K_max = 10000, 
-                               alpha_mean = 5.5, 
-                               sigma_mean = 1, 
-                               ages = chum_ages, 
-                               p_mean = chum_p_mean)
-
-ric_data$generating_model <- "Ricker"
-
-# data <- ric_data %>% 
-#   filter(!is.nan(ln_RS), !is.infinite(ln_RS)) %>% 
-#   rbind(bh_data %>% filter(!is.nan(ln_RS), !is.infinite(ln_RS)))
-# 
-data <- NULL
-
-
-# 
-# for(i in 1:nsims){
-#   
-#   set.seed(12345+i)
-#   bh_data <- bh_function_w_age(mean_harvest = 0.3, 
-#                                sd_harvest = 0.2, 
-#                                K_max = 10000, 
-#                                alpha_mean = 1.5, 
-#                                sigma_mean = 1, 
-#                                ages = chum_ages, 
-#                                p_mean = chum_p_mean)
-#   
-#   bh_data$generating_model <- "Beverton-Holt"
-#   bh_data$sim <- i
-#   
-#   ric_data <- ric_function_w_age(mean_harvest = 0.3, 
-#                                  sd_harvest = 0.2, 
-#                                  K_max = 10000, 
-#                                  alpha_mean = 1.5, 
-#                                  sigma_mean = 1, 
-#                                  ages = chum_ages, 
-#                                  p_mean = chum_p_mean)
-#   
-#   ric_data$generating_model <- "Ricker"
-#   ric_data$sim <- i
-#   
-#   data <- data %>% 
-#     rbind(ric_data %>% filter(!is.nan(ln_RS), !is.infinite(ln_RS))) %>% 
-#     rbind(bh_data %>% filter(!is.nan(ln_RS), !is.infinite(ln_RS)))
-#   
-#   
-# }
-# 
 
 generating_model <- c("Beverton-Holt", "Ricker")
 fitting_model <- c("Beverton-Holt", "Ricker")
@@ -373,7 +289,7 @@ sim_bh_model <- stan_model(file = here("simulation",
                                        "code",
                                        "bh_simple_model_for_simulated_data.stan"))
 
-model_results_w_spawner_combined_df <- data.frame(simulation = numeric(),
+model_results_same_pars_df <- data.frame(simulation = numeric(),
                                                   generating_model = character(),
                                                   parameter = character(),
                                                   true_value = numeric(),
@@ -388,38 +304,23 @@ model_results_w_spawner_combined_df <- data.frame(simulation = numeric(),
 
 options(mc.cores = parallel::detectCores())
 
-nsims <- 500
+nsims <- 100
 
 for(i in 1:nsims){
   
-  set.seed(12345+i)
-  model <- sample(generating_model, 1)
+  print(i)
   
-  if(model == "Beverton-Holt"){
-    
-    data <- bh_function_w_age(mean_harvest = 0.3, 
-                              sd_harvest = 0.2, 
-                              K = 10000, 
-                              alpha_mean = 1.5, 
-                              sigma_mean = 1, 
-                              ages = chum_ages, 
-                              p_mean = chum_p_mean)
-    
-    data$generating_model <- "Beverton-Holt"
-    
-  } else{
-    
-    data <- ric_function_w_age(mean_harvest = 0.3, 
-                              sd_harvest = 0.2, 
-                              K = 10000, 
-                              alpha_mean = 1.5, 
-                              sigma_mean = 1, 
-                              ages = chum_ages, 
-                              p_mean = chum_p_mean)
-    
-    data$generating_model <- "Ricker"
-    
-  }
+  set.seed(12345)
+  
+  data <- bh_function_w_age(mean_harvest = 0.3, 
+                            sd_harvest = 0.2, 
+                            K = 10000, 
+                            alpha_mean = 1.5, 
+                            sigma_mean = 1, 
+                            ages = chum_ages, 
+                            p_mean = chum_p_mean)
+  
+  data$generating_model <- "Beverton-Holt"
   
   true_values <- data %>% 
     group_by(sigma, alpha, K, Smsy) %>% 
@@ -432,7 +333,7 @@ for(i in 1:nsims){
               Smsy = mean(Smsy),
               generating_model = first(generating_model)) %>% 
     pivot_longer(cols = c(sigma, alpha, K, Smsy), names_to = "parameter", values_to = "true_value")
-    
+  
   
   data_list <- list(
     N = nrow(data),
@@ -456,11 +357,11 @@ for(i in 1:nsims){
     if(fit_model == "Beverton-Holt"){
       
       model_sampling <- rstan::sampling(sim_bh_model,
-                                                   data = data_list,
-                                                   iter = 2000,
-                                                   chains = 6,
-                                                   warmup = 1000,
-                                                   verbose = FALSE)
+                                        data = data_list,
+                                        iter = 2000,
+                                        chains = 6,
+                                        warmup = 1000,
+                                        verbose = FALSE)
       
       
       
@@ -469,11 +370,11 @@ for(i in 1:nsims){
     } else if(fit_model == "Ricker"){
       
       model_sampling <- rstan::sampling(sim_ric_model,
-                                                   data = data_list,
-                                                   iter = 2000,
-                                                   chains = 6,
-                                                   warmup = 1000,
-                                                   verbose = FALSE)
+                                        data = data_list,
+                                        iter = 2000,
+                                        chains = 6,
+                                        warmup = 1000,
+                                        verbose = FALSE)
       
       
       
@@ -481,7 +382,6 @@ for(i in 1:nsims){
       
       
     }
-    
     Rhat_values <- data.frame(Rhat = round(summary(model_sampling)$summary[,"Rhat"],3)) %>% 
       rownames_to_column("parameter")
     
@@ -511,107 +411,60 @@ for(i in 1:nsims){
     
     
     
-    model_results_w_spawner_combined_df <- model_results_w_spawner_combined_df %>%
+    model_results_same_pars_df  <- model_results_same_pars_df  %>%
       bind_rows(model_results)
   }
   
   
 }
+  
 
-
-
-
-
-
-model_results_w_spawner_combined_df_new <- model_results_w_spawner_combined_df %>% 
+model_results_same_pars_new <- model_results_same_pars_df %>% 
   group_by(simulation, generating_model, fitting_model) %>%
   mutate(alpha = true_value[parameter == "alpha"],
          sigma = true_value[parameter == "sigma"],
          # b_for = true_value[parameter == "b_for"],
          Smsy = true_value[parameter == "Smsy"],
          K = true_value[parameter == "K"]
-         ) %>%
+  ) %>%
   mutate(alpha_estimate = estimate_median[parameter == "alpha"],
          sigma_estimate = estimate_median[parameter == "sigma"],
          # b_for_estimate = estimate_median[parameter == "b_for"],
          Smsy_estimate = estimate_median[parameter == "Smsy"],
          K_estimate = estimate_median[parameter == "K"]
-         ) %>%
+  ) %>%
   ungroup() 
 
 
-write_csv(model_results_w_spawner_combined_df_new, here("simulation", 
+write_csv(model_results_same_pars_new, here("simulation", 
                                                         "stan_models",
                                                         "output", 
-                                                        "simulation_fitting_results_w_age.csv"))
+                                                        "simulation_fitting_results_w_age_same_pars.csv"))
 
 
+#make histogram of alpha for both BH fitting model and Ricker fitting model
 
-if(Sys.info()[1] == "Windows") {
+model_results_same_pars_new %>% 
+  ggplot() + 
+  geom_histogram(aes(x = alpha_estimate, fill = fitting_model), position = "dodge", bins = 30) +
+  geom_vline(aes(xintercept = alpha), color = "red") +
+  labs(title = "Distribution of alpha estimates for BH and Ricker fitting models", x = "Alpha estimate", y = "Count") +
+  theme_classic()
+
+
+model_results_same_pars_new %>% 
+  ggplot() + 
+  geom_histogram(aes(x = K_estimate, fill = fitting_model), position = "dodge", bins = 30) +
+  geom_vline(aes(xintercept = K), color = "red") +
+  labs(title = "Distribution of K estimates for BH and Ricker fitting models", x = "K estimate", y = "Count") +
+  theme_classic()
+
+model_results_same_pars_new %>% 
+  ggplot() + 
+  geom_histogram(aes(x = Smsy_estimate, fill = fitting_model), position = "dodge", bins = 30) +
+  geom_vline(aes(xintercept = Smsy), color = "red") +
+  labs(title = "Distribution of Smsy estimates for BH and Ricker fitting models", x = "Smsy estimate", y = "Count") +
+  theme_classic()
+
+
   
-  
-  pal <- PNWColors::pnw_palette("Starfish", 5)
-  
-  ggplot(model_results_w_spawner_combined_df_new %>% 
-           filter(parameter == "alpha"), aes(x = alpha, y = estimate_median)) +
-    # geom_point(aes(color = alpha),alpha = 0.5, size = 2) +
-    geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = Smsy), size = 0.5, alpha = 0.5)+
-    geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
-    facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
-    labs(x = "True alpha", y = "Estimated alpha") +
-    # scale_color_gradient2(name = 'alpha',
-    #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
-    scale_color_gradientn(name = 'Estimated S_msy',
-                          colors = pal)+
-    theme_classic()
-  
-  ggplot(model_results_w_spawner_combined_df_new %>% 
-           filter(parameter == "K"), aes(x = K, y = estimate_median)) +
-    geom_point(alpha = 0.5, size = 2) +
-    # geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = Smsy), size = 0.5, alpha = 0.5)+
-    geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
-    facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
-    labs(x = "True K", y = "Estimated K") +
-    scale_x_log10()+
-    scale_y_log10()+
-    # scale_color_gradient2(name = 'alpha',
-    #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
-    scale_color_gradientn(name = 'Estimated S_msy',
-                          colors = pal)+
-    theme_classic()
-  
-  ggplot(model_results_w_spawner_combined_df_new %>% 
-           filter(parameter == "Smsy"), aes(x = Smsy, y = estimate_median)) +
-    # geom_point(aes(color = alpha),alpha = 0.5, size = 2) +
-    geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = alpha), size = 0.5, alpha = 0.5)+
-    geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
-    facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
-    labs(x = "True Smsy", y = "Estimated Smsy") +
-    # scale_color_gradient2(name = 'alpha',
-    #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
-    scale_color_gradientn(name = 'Estimated alpha',
-                          colors = pal)+
-    theme_classic()
-  
-} else{
-  print("running on server")
-  
-  
-  
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
