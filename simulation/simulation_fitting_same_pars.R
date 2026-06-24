@@ -1,7 +1,24 @@
 # Goal - simulate different data sets with the same parameter 1000 times, then fit models to it
+if(Sys.info()[7] == "mariakur") {
+  print("Running on local machine")
+  library(cmdstanr)
+  set_cmdstan_path("C:/Users/mariakur/.cmdstan/cmdstan-2.35.0")
+} else {
+  print("Running on server")
+  .libPaths(new = "/home/mkuruvil/R_Packages")
+  library(cmdstanr)
+  set_cmdstan_path("/home/mkuruvil/R_Packages/cmdstan-2.35.0")
+}
 
+library(here)
+library(ggplot2)
+# suppressPackageStartupMessages(library(rstan))
+# rstan_options("auto_write" = TRUE)
+library(PNWColors)
+library(tidyverse)
+library(gsl)
 
-bh_function_w_age <- function(mean_harvest, sd_harvest, K_max, alpha_mean, sigma_mean, ages, p_mean, burn_in = 50, variation = 0.9){
+bh_function_w_age <- function(mean_harvest, sd_harvest, K, alpha, sigma, ages, p_mean, burn_in = 50, variation = 0.9){
   
   if (sd_harvest^2 >= mean_harvest * (1 - mean_harvest)) {
     stop("sd_harvest is too large for the given mean_harvest. Decrease sd_harvest.")
@@ -27,16 +44,7 @@ bh_function_w_age <- function(mean_harvest, sd_harvest, K_max, alpha_mean, sigma
   
   
   
-  #Random K
-  K = sample(seq(0.8 * K_max, K_max), 1)
   
-  alpha_sample <- rnorm(100, alpha_mean, sd = 1)
-  
-  alpha <- sample(alpha_sample[alpha_sample > 0 & alpha_sample < 10], 1)
-  
-  sigma_sample <- rnorm(100, sigma_mean, 1)
-  
-  sigma <- sample(sigma_sample[sigma_sample > 0 & sigma_sample < 2], 1)
   
   colnames_R <-paste0("R_",ages)
   
@@ -116,7 +124,7 @@ bh_function_w_age <- function(mean_harvest, sd_harvest, K_max, alpha_mean, sigma
 }
 
 
-ric_function_w_age <- function(mean_harvest, sd_harvest, K_max, alpha_mean, sigma_mean, ages, p_mean, burn_in = 50, variation = 0.9){
+ric_function_w_age <- function(mean_harvest, sd_harvest, K, alpha, sigma, ages, p_mean, burn_in = 50, variation = 0.9){
   
   if (sd_harvest^2 >= mean_harvest * (1 - mean_harvest)) {
     stop("sd_harvest is too large for the given mean_harvest. Decrease sd_harvest.")
@@ -141,16 +149,7 @@ ric_function_w_age <- function(mean_harvest, sd_harvest, K_max, alpha_mean, sigm
   
   
   
-  #Random K
-  K = sample(seq(0.8 * K_max, K_max), 1)
   
-  alpha_sample <- rnorm(100, alpha_mean, sd = 1)
-  
-  alpha <- sample(alpha_sample[alpha_sample>0 & alpha_sample < 10], 1)
-  
-  sigma_sample <- rnorm(100, sigma_mean, 1)
-  
-  sigma <- sample(sigma_sample[sigma_sample>0 & sigma_sample < 2], 1)
   
   colnames_R <-paste0("R_",ages)
   
@@ -279,15 +278,15 @@ p_mean <- chum_p_mean
 generating_model <- c("Beverton-Holt", "Ricker")
 fitting_model <- c("Beverton-Holt", "Ricker")
 
-sim_ric_model <- stan_model(file = here("simulation",
+sim_ric_model <-  cmdstanr::cmdstan_model(file.path(here("simulation",
                                         "stan_models",
                                         "code",
-                                        "ric_simple_model_for_simulated_data.stan"))
+                                        "ric_simple_model_for_simulated_data.stan")))
 
-sim_bh_model <- stan_model(file = here("simulation",
+sim_bh_model <-  cmdstanr::cmdstan_model(file.path(here("simulation",
                                        "stan_models",
                                        "code",
-                                       "bh_simple_model_for_simulated_data.stan"))
+                                       "bh_simple_model_for_simulated_data.stan")))
 
 model_results_same_pars_df <- data.frame(simulation = numeric(),
                                                   generating_model = character(),
@@ -304,24 +303,68 @@ model_results_same_pars_df <- data.frame(simulation = numeric(),
 
 options(mc.cores = parallel::detectCores())
 
-nsims <- 100
+nsims <- 200
+
+set.seed(12345)
+
+alpha_mean = 1.5
+
+sigma_mean = 1
+
+K_max = 10000
+
+#Random K
+K = sample(seq(0.8 * K_max, K_max), 1)
+
+alpha_sample <- rnorm(100, alpha_mean, sd = 1)
+
+alpha <- sample(alpha_sample[alpha_sample > 0 & alpha_sample < 10], 1)
+
+sigma_sample <- rnorm(100, sigma_mean, 1)
+
+sigma <- sample(sigma_sample[sigma_sample > 0 & sigma_sample < 2], 1)
 
 for(i in 1:nsims){
   
   print(i)
   
-  set.seed(12345)
+  set.seed(12345+i)
   
-  data <- bh_function_w_age(mean_harvest = 0.3, 
-                            sd_harvest = 0.2, 
-                            K = 10000, 
-                            alpha_mean = 1.5, 
-                            sigma_mean = 1, 
-                            ages = chum_ages, 
-                            p_mean = chum_p_mean)
+  model <- sample(generating_model, 1)
   
-  data$generating_model <- "Beverton-Holt"
+  if(model == "Beverton-Holt"){
+    
+    data <- bh_function_w_age(mean_harvest = 0.3, 
+                              sd_harvest = 0.2, 
+                              K = K, 
+                              alpha = alpha, 
+                              sigma = sigma, 
+                              ages = chum_ages, 
+                              p_mean = chum_p_mean)
+    
+    data$generating_model <- "Beverton-Holt"
+    
+  } else{
+    
+    data <- ric_function_w_age(mean_harvest = 0.3, 
+                               sd_harvest = 0.2, 
+                               K = K, 
+                               alpha = alpha, 
+                               sigma = sigma, 
+                               ages = chum_ages, 
+                               p_mean = chum_p_mean)
+    
+    data$generating_model <- "Ricker"
+    
+  }
   
+  data <- data %>% 
+    filter(!is.nan(ln_RS), !is.infinite(ln_RS))
+  
+  #if data has <2 rows, then go to next simulation
+  if(nrow(data) < 2){
+    next
+  }
   true_values <- data %>% 
     group_by(sigma, alpha, K, Smsy) %>% 
     summarize(sigma = mean(sigma), 
@@ -356,12 +399,10 @@ for(i in 1:nsims){
     
     if(fit_model == "Beverton-Holt"){
       
-      model_sampling <- rstan::sampling(sim_bh_model,
-                                        data = data_list,
-                                        iter = 2000,
-                                        chains = 6,
-                                        warmup = 1000,
-                                        verbose = FALSE)
+      model_sampling <- sim_bh_model$sample(data = data_list,
+                                            iter_sampling  = 2000,
+                                            chains = 6,
+                                            iter_warmup = 1000)
       
       
       
@@ -369,12 +410,10 @@ for(i in 1:nsims){
       
     } else if(fit_model == "Ricker"){
       
-      model_sampling <- rstan::sampling(sim_ric_model,
-                                        data = data_list,
-                                        iter = 2000,
+      model_sampling <- sim_ric_model$sample(data = data_list,
+                                        iter_sampling  = 2000,
                                         chains = 6,
-                                        warmup = 1000,
-                                        verbose = FALSE)
+                                        iter_warmup = 1000)
       
       
       
@@ -382,8 +421,8 @@ for(i in 1:nsims){
       
       
     }
-    Rhat_values <- data.frame(Rhat = round(summary(model_sampling)$summary[,"Rhat"],3)) %>% 
-      rownames_to_column("parameter")
+    Rhat_values <- data.frame(Rhat = round(model_sampling$summary()$rhat,3)) %>% 
+      mutate(parameter = model_sampling$summary()$variable)
     
     
     model_results <- tidybayes::spread_draws(model_sampling, alpha, sigma, K, Smsy) %>%
@@ -439,32 +478,32 @@ model_results_same_pars_new <- model_results_same_pars_df %>%
 write_csv(model_results_same_pars_new, here("simulation", 
                                                         "stan_models",
                                                         "output", 
-                                                        "simulation_fitting_results_w_age_same_pars.csv"))
+                                                        "simulation_fitting_results_w_age_same_pars_200.csv"))
 
 
 #make histogram of alpha for both BH fitting model and Ricker fitting model
-
-model_results_same_pars_new %>% 
-  ggplot() + 
-  geom_histogram(aes(x = alpha_estimate, fill = fitting_model), position = "dodge", bins = 30) +
-  geom_vline(aes(xintercept = alpha), color = "red") +
-  labs(title = "Distribution of alpha estimates for BH and Ricker fitting models", x = "Alpha estimate", y = "Count") +
-  theme_classic()
-
-
-model_results_same_pars_new %>% 
-  ggplot() + 
-  geom_histogram(aes(x = K_estimate, fill = fitting_model), position = "dodge", bins = 30) +
-  geom_vline(aes(xintercept = K), color = "red") +
-  labs(title = "Distribution of K estimates for BH and Ricker fitting models", x = "K estimate", y = "Count") +
-  theme_classic()
-
-model_results_same_pars_new %>% 
-  ggplot() + 
-  geom_histogram(aes(x = Smsy_estimate, fill = fitting_model), position = "dodge", bins = 30) +
-  geom_vline(aes(xintercept = Smsy), color = "red") +
-  labs(title = "Distribution of Smsy estimates for BH and Ricker fitting models", x = "Smsy estimate", y = "Count") +
-  theme_classic()
+# 
+# model_results_same_pars_new %>% 
+#   ggplot() + 
+#   geom_histogram(aes(x = alpha_estimate, fill = fitting_model), position = "dodge", bins = 30) +
+#   geom_vline(aes(xintercept = alpha), color = "red") +
+#   labs(title = "Distribution of alpha estimates for BH and Ricker fitting models", x = "Alpha estimate", y = "Count") +
+#   theme_classic()
+# 
+# 
+# model_results_same_pars_new %>% 
+#   ggplot() + 
+#   geom_histogram(aes(x = K_estimate, fill = fitting_model), position = "dodge", bins = 30) +
+#   geom_vline(aes(xintercept = K), color = "red") +
+#   labs(title = "Distribution of K estimates for BH and Ricker fitting models", x = "K estimate", y = "Count") +
+#   theme_classic()
+# 
+# model_results_same_pars_new %>% 
+#   ggplot() + 
+#   geom_histogram(aes(x = Smsy_estimate, fill = fitting_model), position = "dodge", bins = 30) +
+#   geom_vline(aes(xintercept = Smsy), color = "red") +
+#   labs(title = "Distribution of Smsy estimates for BH and Ricker fitting models", x = "Smsy estimate", y = "Count") +
+#   theme_classic()
 
 
   
