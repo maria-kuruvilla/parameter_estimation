@@ -8,8 +8,6 @@ if(Sys.info()[7] == "mariakur") {
   .libPaths(new = "/home/mkuruvil/R_Packages")
   library(cmdstanr)
   set_cmdstan_path("/home/mkuruvil/R_Packages/cmdstan-2.35.0")
-  install.packages("tidybayes", lib = "/home/mkuruvil/R_Packages")
-  install.packages("ggdist", lib = "/home/mkuruvil/R_Packages")
 }
 
 library(here)
@@ -19,7 +17,6 @@ library(ggplot2)
 library(PNWColors)
 library(tidyverse)
 library(gsl)
-library(tidybayes)
 
 bh_function_w_age <- function(mean_harvest, sd_harvest, K, alpha, sigma, ages, p_mean, burn_in = 50, variation = 0.9){
   
@@ -445,6 +442,25 @@ for(i in 1:nsims){
       # mutate(data_model = "Ricker") %>% 
       mutate(error = 100*(estimate_median - true_value)/true_value)
     
+    model_results <- data.frame(model_sampling$draws(variables=c("alpha", "sigma", "K", "Smsy"),format='draws_matrix')) %>%
+      mutate(fitting_model = fit_model, simulation = i) %>%
+      select(fitting_model, alpha, sigma, K, Smsy, simulation) %>% 
+      pivot_longer(cols = c(alpha, K, sigma, Smsy), names_to = "parameter", values_to = "value") %>%
+      group_by(fitting_model, parameter, simulation) %>%
+      summarise(
+        estimate_median = round(median(value),2),
+        estimate_lower = round(quantile(value, 0.025),2),
+        estimate_upper = round(quantile(value, 0.975),2)
+      ) %>%
+      ungroup() %>% 
+      
+      left_join(true_values, by = "parameter") %>% 
+      left_join(Rhat_values, by = "parameter") %>% 
+      # mutate(data_model = "Ricker") %>% 
+      mutate(error = 100*(estimate_median - true_value)/true_value)
+    
+    
+    
     
     
     # print(true_values)
@@ -486,8 +502,8 @@ write_csv(model_results_same_pars_new, here("simulation",
 
 #make histogram of alpha for both BH fitting model and Ricker fitting model
 # 
-# model_results_same_pars_new %>% 
-#   ggplot() + 
+# model_results_same_pars_new %>%
+#   ggplot() +
 #   geom_histogram(aes(x = alpha_estimate, fill = fitting_model), position = "dodge", bins = 30) +
 #   geom_vline(aes(xintercept = alpha), color = "red") +
 #   labs(title = "Distribution of alpha estimates for BH and Ricker fitting models", x = "Alpha estimate", y = "Count") +
