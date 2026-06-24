@@ -9,6 +9,7 @@ if(Sys.info()[7] == "mariakur") {
   library(cmdstanr)
   set_cmdstan_path("/home/mkuruvil/R_Packages/cmdstan-2.35.0")
   install.packages("tidybayes", lib = "/home/mkuruvil/R_Packages")
+  install.packages("ggdist", lib = "/home/mkuruvil/R_Packages")
 }
 
 library(here)
