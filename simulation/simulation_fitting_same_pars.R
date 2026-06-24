@@ -8,6 +8,7 @@ if(Sys.info()[7] == "mariakur") {
   .libPaths(new = "/home/mkuruvil/R_Packages")
   library(cmdstanr)
   set_cmdstan_path("/home/mkuruvil/R_Packages/cmdstan-2.35.0")
+  install.packages("tidybayes", lib = "/home/mkuruvil/R_Packages")
 }
 
 library(here)
@@ -17,6 +18,7 @@ library(ggplot2)
 library(PNWColors)
 library(tidyverse)
 library(gsl)
+library(tidybayes)
 
 bh_function_w_age <- function(mean_harvest, sd_harvest, K, alpha, sigma, ages, p_mean, burn_in = 50, variation = 0.9){
   
