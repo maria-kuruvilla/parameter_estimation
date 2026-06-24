@@ -424,24 +424,6 @@ for(i in 1:nsims){
     Rhat_values <- data.frame(Rhat = round(model_sampling$summary()$rhat,3)) %>% 
       mutate(parameter = model_sampling$summary()$variable)
     
-    
-    model_results <- tidybayes::spread_draws(model_sampling, alpha, sigma, K, Smsy) %>%
-      mutate(fitting_model = fit_model, simulation = i) %>%
-      select(fitting_model, alpha, sigma, K, Smsy, simulation) %>% 
-      pivot_longer(cols = c(alpha, K, sigma, Smsy), names_to = "parameter", values_to = "value") %>%
-      group_by(fitting_model, parameter, simulation) %>%
-      summarise(
-        estimate_median = round(median(value),2),
-        estimate_lower = round(quantile(value, 0.025),2),
-        estimate_upper = round(quantile(value, 0.975),2)
-      ) %>%
-      ungroup() %>% 
-      
-      left_join(true_values, by = "parameter") %>% 
-      left_join(Rhat_values, by = "parameter") %>% 
-      # mutate(data_model = "Ricker") %>% 
-      mutate(error = 100*(estimate_median - true_value)/true_value)
-    
     model_results <- data.frame(model_sampling$draws(variables=c("alpha", "sigma", "K", "Smsy"),format='draws_matrix')) %>%
       mutate(fitting_model = fit_model, simulation = i) %>%
       select(fitting_model, alpha, sigma, K, Smsy, simulation) %>% 
