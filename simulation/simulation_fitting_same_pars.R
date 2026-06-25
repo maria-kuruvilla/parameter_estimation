@@ -303,7 +303,7 @@ model_results_same_pars_df <- data.frame(simulation = numeric(),
 
 options(mc.cores = parallel::detectCores())
 
-nsims <- 200
+nsims <- 1000
 
 set.seed(12345)
 
@@ -479,7 +479,7 @@ model_results_same_pars_new <- model_results_same_pars_df %>%
 write_csv(model_results_same_pars_new, here("simulation", 
                                                         "stan_models",
                                                         "output", 
-                                                        "simulation_fitting_results_w_age_same_pars_200.csv"))
+                                                        "simulation_fitting_results_w_age_same_pars_1000.csv"))
 
 
 #make histogram of alpha for both BH fitting model and Ricker fitting model
