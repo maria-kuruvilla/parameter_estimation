@@ -572,7 +572,7 @@ nsims <- 100
 
 #first for one covariate
 
-covariate <- sst
+covariate <- forestry
 
 for(i in 1:nsims){
   
@@ -766,7 +766,7 @@ model_results_w_spawner_combined_df_new <- model_results_w_spawner_combined_df %
 write_csv(model_results_w_spawner_combined_df_new, here("simulation",
                                                         "stan_models",
                                                         "output",
-                                                        paste0("simulation_fitting_results_w_covariates_",nsims,".csv")))
+                                                        paste0("simulation_fitting_results_w_covariate_forestry_",nsims,".csv")))
 
 
 

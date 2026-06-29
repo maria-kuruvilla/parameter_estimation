@@ -196,6 +196,65 @@ simulation_results_same_pars %>%
 
 ```
 
+
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+simulation_results_diff_pars_w_covariate <- read_csv(here("simulation",
+                                              "stan_models",
+                                              "output",
+                                              "simulation_fitting_results_w_covariates_100.csv"))
+
+ 
+ggplot(simulation_results_diff_pars_w_covariate %>% 
+         filter(parameter == "alpha"), aes(x = alpha, y = estimate_median)) +
+  # geom_point(aes(color = alpha),alpha = 0.5, size = 2) +
+  geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = sigma), size = 0.5, alpha = 0.5)+
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
+  labs(x = "True alpha", y = "Estimated alpha") +
+  # scale_color_gradient2(name = 'alpha',
+  #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
+  scale_color_gradientn(name = 'sigma',
+                        colors = pal)+
+  theme_classic()
+
+
+ 
+ggplot(simulation_results_diff_pars_w_covariate %>% 
+         filter(parameter == "alpha"), aes(x = alpha, y = estimate_median)) +
+  # geom_point(aes(color = alpha),alpha = 0.5, size = 2) +
+  geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = min_S), size = 0.5, alpha = 0.5)+
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
+  labs(x = "True alpha", y = "Estimated alpha") +
+  # scale_color_gradient2(name = 'alpha',
+  #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
+  scale_color_gradientn(name = 'min(Spawners)',
+                        colors = pal)+
+  theme_classic()
+
+
+ggplot(simulation_results_diff_pars_w_covariate %>% 
+         filter(parameter == "b_cov"), aes(x = b_cov, y = estimate_median)) +
+  # geom_point(aes(color = alpha),alpha = 0.5, size = 2) +
+  geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = sigma), size = 0.5, alpha = 0.5)+
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
+  labs(x = "True alpha", y = "Estimated alpha") +
+  # scale_color_gradient2(name = 'alpha',
+  #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
+  scale_color_gradientn(name = 'sigma',
+                        colors = pal)+
+  theme_classic()
+
+
+
+```
+
+
+
 To do:
 
 -   Generate data using Spawner data from the RAM Legacy database.
