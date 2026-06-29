@@ -1,33 +1,17 @@
 ---
-title: Parameter estimation in fishery models
-author:
-  - name: Maria Kuruvilla
-#     email: maria75799@gmail.com
-#     affiliation: University of Victoria
-#     corresponding: maria75799@gmail.com
-#   # - name: Bob Security
-#   #   email: bob@example.com
-#   #   affiliation: 
-#   #     - Another University
-#   #     - Some Institute of Technology
-# address:
-#   - code: University of Victoria
-#     address: University of Victoria, Department of Biology, 3800 Finnerty Rd, Victoria BC V8P 5C2
-#   # - code: Another University
-#   #   address: Department 2, Street, City, State, Zip
-# abstract: |
-
-author_summary: |
-  
-
-bibliography: mybibfile.bib
-output: #rticles::plos_article
-  word_document:
-# plos.csl can be download and used locally
-csl: http://www.zotero.org/styles/plos
-
 word_document:
-    toc: true
+  toc: true
+author:
+- name: Maria Kuruvilla
+author_summary: null
+output:
+  html_document:
+    df_print: paged
+  word_document: null
+  pdf_document: default
+bibliography: mybibfile.bib
+csl: http://www.zotero.org/styles/plos
+title: "Parameter estimation in fishery models"
 ---
 
 ```{r setup, include=FALSE}
@@ -51,14 +35,12 @@ pal <- PNWColors::pnw_palette("Starfish", 5)
 
 ```
 
-
 <!-- _Text based on plos sample manuscript, see <https://journals.plos.org/ploscompbiol/s/latex>_ -->
-
 
 # Introduction
 
-  Fish population dynamics models have been used for several decades to describe the relationship between spawner abundance and future recruitment. The parameters in these models are estimated and used to predict the population size in the future, to manage fisheries, and more recently to understand factors (physical, biological, or human) that cause changes in fish populations. However, the parameters in these complex models may not be uniquely identifiable. We used simulations, profile likelihood, and Bayesian hierarchical modelling to check the limitations of commonly used fisheries models, such as the Ricker and the Beverton-Holt model. We provide some guidelines on the most appropriate use cases for these models. 
-  
+Fish population dynamics models have been used for several decades to describe the relationship between spawner abundance and future recruitment. The parameters in these models are estimated and used to predict the population size in the future, to manage fisheries, and more recently to understand factors (physical, biological, or human) that cause changes in fish populations. However, the parameters in these complex models may not be uniquely identifiable. We used simulations, profile likelihood, and Bayesian hierarchical modelling to check the limitations of commonly used fisheries models, such as the Ricker and the Beverton-Holt model. We provide some guidelines on the most appropriate use cases for these models.
+
 ### Beverton-Holt Equation
 
 $\ln(\frac{R}{S}) = e^{\alpha} - \ln(1 + \frac{e^{\alpha} S}{R_k}) + \beta SST + \epsilon$
@@ -69,17 +51,17 @@ $\epsilon \sim N(0,\sigma)$
 
 ### Ricker Equation
 
-
 $\ln(\frac{R}{S}) = \alpha - \frac{S}{S_{max}} + \beta SST + \epsilon$
 
 $S_{max} = \frac{K}{\alpha}$
 
 $\epsilon \sim N(0,\sigma)$
 
-  
 ## Simulation
 
-We simulated data for log recruits per spawner $\ln(\frac{R}{S})$, also known as productivity, with the Beverton-Holt equation and the Ricker equation with randomly drawn values of $\alpha$, $\sigma$, $K$, and with empirical spawner data. We then fit both the Beverton-Holt model and the Ricker model in Bayesian framework to this data to estimate the same parameters. We plotted the median estimates of these parameters with  95% credible intervals along with the true values of the parameters to evaluate the accuracy and precision of the parameter estimates. 
+<!-- We simulated data for log recruits per spawner $\ln(\frac{R}{S})$, also known as productivity, with the Beverton-Holt equation and the Ricker equation with randomly drawn values of $\alpha$, $\sigma$, $K$, and with empirical spawner data. We then fit both the Beverton-Holt model and the Ricker model in Bayesian framework to this data to estimate the same parameters. We plotted the median estimates of these parameters with  95% credible intervals along with the true values of the parameters to evaluate the accuracy and precision of the parameter estimates.  -->
+
+We simulated the population dynamics of salmon using two spawner recruit models - Ricker and Beverton-Holt. The simulation models containied submodels for recruitment, harvest and age-structure, with natural variability in recruitment, harvest, and age-at-maturity.
 
 ### Base model
 
@@ -95,7 +77,6 @@ $\epsilon \sim N(0,\sigma)$
 
 ### Ricker Equation
 
-
 $\ln(\frac{R}{S}) = \alpha - \frac{S}{S_{max}} + \epsilon$
 
 $S_{max} = \frac{K}{\alpha}$
@@ -104,7 +85,55 @@ $S_{MSY} =  (1-W_0(e^{1 - \alpha}))S_{max}$
 
 $\epsilon \sim N(0,\sigma)$
 
-  
+
+
+```{r flowchart, echo=FALSE, message=FALSE, warning=FALSE}
+library(DiagrammeR)
+library(DiagrammeRsvg)
+library(rsvg)
+library(magrittr)
+
+# 1. Create the graph using Graphviz
+flowchart <- grViz("
+digraph G {
+  graph [layout = dot, rankdir = TD]
+
+  # Default nodes
+  node [shape = box, style = filled, fillcolor = '#f9f9f9', fontname = 'Helvetica', color = '#333333']
+  A [label = 'Draw Parameters']
+  B [label = 'Initialize Spawners near K\\nfor t = 1 to maximum spawning age']
+  H [label = 'Post Processing\\ndiscard first 50 years, calculate $S_{MSY}$']
+
+  # Decision nodes (diamonds)
+  node [shape = diamond, fillcolor = '#f9f9f9']
+  C [label = 'Is t > maximum spawning age?']
+  G [label = 'Is Simulation Complete?']
+
+  # Process nodes (blue)
+  node [shape = box, fillcolor = '#e1f5fe', color = '#36a2eb', penwidth = 2]
+  D [label = 'Calculate Run Size:\\nSum returning ages from past brood years']
+  E [label = 'Apply Harvest Rate:\\nCalculate Escapement']
+  F [label = 'Calculate Recruitment:\\nApply spawner recruitment model']
+
+  # Connect the arrows
+  A -> B
+  B -> C
+  C -> D [label = ' Yes']
+  D -> E
+  C -> F [label = ' No']
+  E -> F
+  F -> G
+  G -> C [label = ' No']
+  G -> H [label = ' Yes']
+}
+")
+
+# 2. Convert the graph to a PNG image and save it to your folder
+export_svg(flowchart) %>% charToRaw() %>% rsvg_png("simulation_flowchart.png")
+
+# 3. Insert the PNG image into the Word document
+knitr::include_graphics("simulation_flowchart.png")
+```
 
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
@@ -134,46 +163,57 @@ ggplot(simulation_results_diff_pars %>%
 
 
 
-
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 
 simulation_results_same_pars <- read_csv(here("simulation",
                                               "stan_models",
                                               "output",
-                                              "simulation_fitting_results_w_age_same_pars_200.csv"))
+                                              "simulation_fitting_results_w_age_same_pars_1000.csv"))
 
 simulation_results_same_pars %>%
   ggplot() +
   # geom_histogram(aes(x = alpha_estimate, fill = fitting_model), position = "dodge", bins = 30) +
-  geom_density(aes(x = alpha_estimate, fill = fitting_model), alpha = 0.5, color = NA) +
+  geom_density(aes(x = alpha_estimate, fill = fitting_model, lty = generating_model), alpha = 0.5, color = "black") +
   geom_vline(aes(xintercept = alpha, color = "alpha"), lty = "dashed", size = 1) +
   labs(title = "Distribution of alpha estimates for BH and Ricker fitting models", x = "Alpha estimate", y = "Density") +
   scale_fill_manual(name = "Fitting model", values = c( "#807182","#99C2A2")) +
+  scale_color_manual(name = "True value", values = c("alpha" = "slategray")) +
+  scale_linetype_manual(name = "Generating model", values = c("Beverton-Holt" = "solid", "Ricker" = "dashed")) +
+  theme_classic()
+
+simulation_results_same_pars %>%
+  filter(fitting_model == "Ricker") %>% 
+  ggplot() +
+  # geom_histogram(aes(x = alpha_estimate, fill = fitting_model), position = "dodge", bins = 30) +
+  geom_density(aes(x = alpha_estimate, fill = generating_model), alpha = 0.5, color = NA) +
+  geom_vline(aes(xintercept = alpha, color = "alpha"), lty = "dashed", size = 1) +
+  labs(title = "Distribution of alpha estimates for Ricker fitting model", x = "Alpha estimate", y = "Density") +
+  scale_fill_manual(name = "Generating model", values = c( "#807182","#99C2A2")) +
   scale_color_manual(name = "True value", values = c("alpha" = "slategray")) +
   theme_classic()
 
 
 
 ```
+
 To do:
 
-- Generate data using Spawner data from the RAM Legacy database. 
-    - Include salmon and few other species. Check for data at low spawner levels.
-- Fit multiple reformulations of the Beverton-Holt model and Ricker model with carrying capacity, $S_{MSY}$.
-- Plot the estimates and true values of  $\alpha$, $K$, $S_{MSY}$.
-- Generate data with sea-surface temperature (SST) covariate and estimate the effect of SST on productivity, $\beta$. 
-    - Plot the estimates and true values of  $\beta$.
-- Generate multiple datasets for the same values of $\alpha$, $K$ and plot the distribution of estimated medians.
+-   Generate data using Spawner data from the RAM Legacy database.
+    -   Include salmon and few other species. Check for data at low spawner levels.
+-   Fit multiple reformulations of the Beverton-Holt model and Ricker model with carrying capacity, $S_{MSY}$.
+-   Plot the estimates and true values of $\alpha$, $K$, $S_{MSY}$.
+-   Generate data with sea-surface temperature (SST) covariate and estimate the effect of SST on productivity, $\beta$.
+    -   Plot the estimates and true values of $\beta$.
+-   Generate multiple datasets for the same values of $\alpha$, $K$ and plot the distribution of estimated medians.
 
 ## Profile Likelihoods
 
-Profile likelihood is a statistical tool that can be used to determine whether a parameter is identifiable, practically unidentifiable, or structurally unidentifiable [@Raue_2009]. We plot the profile likelihood of $\alpha$, and $K$ parameters of both the Ricker model and the Beverton-Holt model after fitting these models to data generated from both the Beverton-Holt equation and the Ricker equation. 
+Profile likelihood is a statistical tool that can be used to determine whether a parameter is identifiable, practically unidentifiable, or structurally unidentifiable [@Raue_2009]. We plot the profile likelihood of $\alpha$, and $K$ parameters of both the Ricker model and the Beverton-Holt model after fitting these models to data generated from both the Beverton-Holt equation and the Ricker equation.
 
 To do:
 
-- Generate multiple datasets with data at low and high spawner levels
-- Plot the profile likelihood of the model parameters for multiple datasets
-
+-   Generate multiple datasets with data at low and high spawner levels
+-   Plot the profile likelihood of the model parameters for multiple datasets
 
 ## Significance
 
@@ -181,26 +221,12 @@ The Beverton-Holt model and the Ricker model differ in their assumptions about d
 
 Using a Bayesian approach allows us to quantify the full uncertainty associated with all parameters and metrics of interest, such as harvest targets. However, having high levels of uncetainty are unhelpful with management decisions. It is useful to know when the model structure leads to high levels of uncertainty in the parameters and metrics of interest. We can then use this information to make informed decisions about which model to use for specific datasets and to be cautious about the interpretation of the results.
 
-
-
-
-
-
 <!-- # Introduction -->
-
-
-
 
 <!-- # Methods -->
 
-
-
-
 <!-- # Results -->
 
-
 <!-- # Discussion -->
-
-
 
 # References {#references .unnumbered}
