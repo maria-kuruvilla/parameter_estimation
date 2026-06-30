@@ -714,7 +714,7 @@ model_results_same_pars_df_new <- model_results_same_pars_df %>%
   ungroup() 
 
 
-write_csv(model_results_same_pars_new, here("simulation", 
+write_csv(model_results_same_pars_df_new, here("simulation", 
                                             "stan_models",
                                             "output", 
                                             paste0("simulation_fitting_results_w_age_same_pars_low_alpha_low_sigma_",nsims,".csv")))
