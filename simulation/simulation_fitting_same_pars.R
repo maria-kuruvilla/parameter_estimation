@@ -637,8 +637,11 @@ for(i in 1:nsims){
       
       
     }
-    Rhat_values <- data.frame(Rhat = round(model_sampling$summary()$rhat,3)) %>% 
-      mutate(parameter = model_sampling$summary()$variable)
+    Rhat_values_ric <- data.frame(Rhat = round(model_sampling_ric$summary()$rhat,3)) %>% 
+      mutate(parameter = model_sampling_ric$summary()$variable)
+    
+    Rhat_values_bh <- data.frame(Rhat = round(model_sampling_bh$summary()$rhat,3)) %>%
+      mutate(parameter = model_sampling_bh$summary()$variable)
     
     model_results_ric <- data.frame(model_sampling_ric$draws(variables=c("alpha", "sigma", "K", "Smsy"),format='draws_matrix')) %>%
       mutate(fitting_model = fit_model, simulation = i) %>%
@@ -653,7 +656,7 @@ for(i in 1:nsims){
       ungroup() %>% 
       
       left_join(true_values_ric, by = "parameter") %>% 
-      left_join(Rhat_values, by = "parameter") %>% 
+      left_join(Rhat_values_ric, by = "parameter") %>% 
       # mutate(data_model = "Ricker") %>% 
       mutate(error = 100*(estimate_median - true_value)/true_value)
     
@@ -671,7 +674,7 @@ for(i in 1:nsims){
       ungroup() %>% 
       
       left_join(true_values_bh, by = "parameter") %>% 
-      left_join(Rhat_values, by = "parameter") %>% 
+      left_join(Rhat_values_bh, by = "parameter") %>% 
       # mutate(data_model = "Ricker") %>% 
       mutate(error = 100*(estimate_median - true_value)/true_value)
     
@@ -694,7 +697,7 @@ for(i in 1:nsims){
 }
 
 
-model_results_same_pars_new <- model_results_same_pars_df %>% 
+model_results_same_pars_df_new <- model_results_same_pars_df %>% 
   group_by(simulation, generating_model, fitting_model) %>%
   mutate(alpha = true_value[parameter == "alpha"],
          sigma = true_value[parameter == "sigma"],
