@@ -1,0 +1,557 @@
+# Goal - to simulate one data set with low sigma and low alpha
+
+# fit the BH and Ricker model to the data set, estimate alpha, note the variance of the posterior
+
+# clone the data k times and repeat the fitting, estimation, noting variance
+
+# Goal - simulate different data sets with the same parameter 1000 times, then fit models to it
+if(Sys.info()[7] == "mariakur") {
+  print("Running on local machine")
+  library(cmdstanr)
+  set_cmdstan_path("C:/Users/mariakur/.cmdstan/cmdstan-2.35.0")
+} else {
+  print("Running on server")
+  .libPaths(new = "/home/mkuruvil/R_Packages")
+  library(cmdstanr)
+  set_cmdstan_path("/home/mkuruvil/R_Packages/cmdstan-2.35.0")
+}
+
+library(here)
+library(ggplot2)
+# suppressPackageStartupMessages(library(rstan))
+# rstan_options("auto_write" = TRUE)
+library(PNWColors)
+library(tidyverse)
+library(gsl)
+
+
+bh_function_w_age <- function(mean_harvest, sd_harvest, K, alpha, sigma, ages, p_mean, burn_in = 50, variation = 0.9){
+  
+  if (sd_harvest^2 >= mean_harvest * (1 - mean_harvest)) {
+    stop("sd_harvest is too large for the given mean_harvest. Decrease sd_harvest.")
+  }
+  
+  # number of years - random between 20 and 50
+  years <- sample(26:50, 1)
+  
+  total_years <- years + burn_in #simulate for total an then discard data for burn_in years
+  
+  # harvest rate varying with year, beta distribution with mean = 0.3, sd = 0.2
+  
+  harvest_rate <- rbeta(total_years, shape1 = mean_harvest * ((mean_harvest * (1 - mean_harvest) / sd_harvest^2) - 1), 
+                        shape2 = (1 - mean_harvest) * ((mean_harvest * (1 - mean_harvest) / sd_harvest^2) - 1))
+  
+  
+  prop <- generate_return_proportions(
+    n_years = total_years, 
+    p_mean = p_mean, 
+    ages = ages, 
+    u = variation # Using the variation value for coho from Peacock & Holt 2012 
+  )
+  
+  
+  
+  
+  
+  colnames_R <-paste0("R_",ages)
+  
+  R_S = data.frame(matrix(nrow = total_years, ncol = length(ages)+3))
+  
+  colnames(R_S) <- c("S", colnames_R, "Run", "R")
+  
+  R_S$year <- 1:total_years
+  
+  R_S$alpha <- alpha
+  
+  R_S$sigma <- sigma
+  
+  R_S$K <- K
+  
+  R_S$harvest_rate <- harvest_rate
+  
+  max_age <- max(ages)
+  
+  for(t in 1:total_years){
+    epsilon <- rnorm(1, mean = 0, sd = sigma)
+    if(t<=max_age){
+      #random initial spawner abundance near carrying capacity for the first max_age years
+      R_S$S[t] <- K * runif(1, 0.8, 1.2)
+      
+    } else{
+      
+      total_run_for_year <- 0
+      for(a in ages) {
+        # Calculate returns for specific age 'a' from brood year 't-a'
+        age_col <- paste0("Age_", a)
+        return_col <- paste0("R_", a)
+        
+        # Recruits generated 'a' years ago * proportion returning at age 'a'
+        age_returns <- R_S$R[t - a] * prop[t - a, age_col]
+        
+        R_S[t, return_col] <- age_returns
+        total_run_for_year <- total_run_for_year + age_returns
+      }
+      
+      
+      R_S$Run[t] <- total_run_for_year
+      
+      R_S$S[t] <- R_S$Run[t]*(1-harvest_rate[t])
+      
+      
+    }
+    
+    if(R_S$S[t] < 2){
+      
+      R_S$R[t] <- 0
+      
+    } else{
+      
+      Rk <- exp(alpha)*K/(exp(alpha) -1)
+      
+      R_S$R[t] <- R_S$S[t]*(exp(alpha)/(1 + exp(alpha)*R_S$S[t]/Rk))*exp(epsilon)
+      
+    }
+    
+    
+    
+    
+  }
+  #discard burn in years
+  
+  R_S_final <- R_S[(burn_in + 1):total_years,]
+  
+  R_S_final$year <- 1:years
+  
+  R_S_final$ln_RS <- log(R_S_final$R / R_S_final$S)
+  
+  R_S_final$Smsy <- R_S_final$K/(exp(R_S_final$alpha/2)+1)
+  
+  return(R_S_final)
+  
+}
+
+
+ric_function_w_age <- function(mean_harvest, sd_harvest, K, alpha, sigma, ages, p_mean, burn_in = 50, variation = 0.9){
+  
+  if (sd_harvest^2 >= mean_harvest * (1 - mean_harvest)) {
+    stop("sd_harvest is too large for the given mean_harvest. Decrease sd_harvest.")
+  }
+  # number of years - random between 20 and 50
+  years <- sample(26:50, 1)
+  
+  total_years <- years + burn_in #simulate for total an then discard data for burn_in years
+  
+  # harvest rate varying with year, beta distribution with mean = 0.3, sd = 0.2
+  
+  harvest_rate <- rbeta(total_years, shape1 = mean_harvest * ((mean_harvest * (1 - mean_harvest) / sd_harvest^2) - 1), 
+                        shape2 = (1 - mean_harvest) * ((mean_harvest * (1 - mean_harvest) / sd_harvest^2) - 1))
+  
+  
+  prop <- generate_return_proportions(
+    n_years = total_years, 
+    p_mean = p_mean, 
+    ages = ages, 
+    u = variation # 0.9 Using the variation value from Peacock & Holt 2012 
+  )
+  
+  
+  
+  
+  
+  colnames_R <-paste0("R_",ages)
+  
+  R_S = data.frame(matrix(nrow = total_years, ncol = length(ages)+3))
+  
+  colnames(R_S) <- c("S", colnames_R, "Run", "R")
+  
+  R_S$year <- 1:total_years
+  
+  R_S$alpha <- alpha
+  
+  R_S$sigma <- sigma
+  
+  R_S$K <- K
+  
+  R_S$harvest_rate <- harvest_rate
+  
+  max_age <- max(ages)
+  
+  for(t in 1:total_years){
+    
+    epsilon <- rnorm(1, mean = 0, sd = sigma)
+    
+    if(t <= max_age){
+      #random initial spawner abundance near carrying capacity for the first max_age years
+      R_S$S[t] <- K * runif(1, 0.8, 1.2)
+      
+    } else{
+      
+      total_run_for_year <- 0
+      for(a in ages) {
+        # Calculate returns for specific age 'a' from brood year 't-a'
+        age_col <- paste0("Age_", a)
+        return_col <- paste0("R_", a)
+        
+        # Recruits generated 'a' years ago * proportion returning at age 'a'
+        age_returns <- R_S$R[t - a] * prop[t - a, age_col]
+        
+        R_S[t, return_col] <- age_returns
+        total_run_for_year <- total_run_for_year + age_returns
+      }
+      
+      
+      R_S$Run[t] <- total_run_for_year
+      
+      R_S$S[t] <- R_S$Run[t]*(1-harvest_rate[t])
+      
+      
+    }
+    
+    if(R_S$S[t] < 2){
+      
+      R_S$R[t] <- 0
+      
+    } else{
+      
+      Smax <- K/alpha
+      R_S$R[t]  <- R_S$S[t]*(exp(alpha - R_S$S[t]/Smax))*exp(epsilon)
+      
+    }
+    
+    
+    
+    
+  }
+  #discard burn in years
+  
+  R_S_final <- R_S[(burn_in + 1):total_years,]
+  
+  R_S_final$year <- 1:years
+  
+  R_S_final$ln_RS <- log(R_S_final$R / R_S_final$S)
+  
+  R_S_final$Smsy <- (1-lambert_W0(exp(1-R_S_final$alpha)))*R_S_final$K/R_S_final$alpha
+  
+  return(R_S_final)
+  
+}
+
+
+generate_return_proportions <- function(n_years, p_mean, ages, u = 0.9) {
+  
+  # Ensure probabilities sum to 1
+  if (abs(sum(p_mean) - 1) > 1e-6) {
+    stop("The mean proportions (p_mean) must sum to 1.")
+  }
+  
+  num_ages <- length(ages)
+  
+  # Initialize the output matrix
+  p_gt_matrix <- matrix(0, nrow = n_years, ncol = num_ages)
+  colnames(p_gt_matrix) <- paste0("Age_", ages)
+  
+  for (t in 1:n_years) {
+    
+    # Generate standard normal deviates for each age in year t 
+    epsilon_gt <- rnorm(n = num_ages, mean = 0, sd = 1)
+    
+    # Calculate the inner term: log(p_mean) + scaling factor depends on species * error
+    inner_term <- log(p_mean) + (u * epsilon_gt)
+    
+    # Calculate the mean of the inner term across all ages 
+    # This corresponds to the summation divided by (G - a1 + 1) 
+    mean_inner_term <- mean(inner_term)
+    
+    # Calculate the dummy variable x_{g,t} 
+    x_gt <- inner_term - mean_inner_term
+    
+    # Calculate the final proportions p_{g,t} using the multivariate logistic equation 
+    p_gt <- exp(x_gt) / sum(exp(x_gt))
+    
+    # Store in the matrix
+    p_gt_matrix[t, ] <- p_gt
+  }
+  
+  return(p_gt_matrix)
+}
+
+chum_ages <- c(3, 4, 5, 6)
+chum_p_mean <- c(0.15, 0.65, 0.18, 0.02)
+
+ages <- chum_ages
+p_mean <- chum_p_mean
+
+
+generating_model <- c("Beverton-Holt", "Ricker")
+fitting_model <- c("Beverton-Holt", "Ricker")
+
+sim_ric_model <-  cmdstanr::cmdstan_model(file.path(here("simulation",
+                                                         "stan_models",
+                                                         "code",
+                                                         "ric_simple_model_for_simulated_data.stan")))
+
+sim_bh_model <-  cmdstanr::cmdstan_model(file.path(here("simulation",
+                                                        "stan_models",
+                                                        "code",
+                                                        "bh_simple_model_for_simulated_data.stan")))
+
+
+alpha_fixed <- 1.1
+sigma_fixed <- 1.1
+K_fixed = 10000
+
+set.seed(3241)
+
+data_ric <- ric_function_w_age(mean_harvest = 0.3, 
+                               sd_harvest = 0.2, 
+                               K = K_fixed, 
+                               alpha = alpha_fixed, 
+                               sigma = sigma_fixed, 
+                               ages = chum_ages, 
+                               p_mean = chum_p_mean) 
+
+data_ric$generating_model <- "Ricker"
+
+data_ric <- data_ric %>% 
+  filter(!is.nan(ln_RS), !is.infinite(ln_RS))
+
+
+data_bh <- bh_function_w_age(mean_harvest = 0.3, 
+                             sd_harvest = 0.2, 
+                             K = K_fixed, 
+                             alpha = alpha_fixed, 
+                             sigma = sigma_fixed, 
+                             ages = chum_ages, 
+                             p_mean = chum_p_mean) 
+
+data_bh$generating_model <- "Beverton-Holt"
+
+data_bh <- data_bh %>% 
+  filter(!is.nan(ln_RS), !is.infinite(ln_RS))
+
+true_values_bh <- data_bh %>% 
+  group_by(sigma, alpha, K, Smsy) %>% 
+  summarize(sigma = mean(sigma), 
+            # forestry_effect = mean(forestry_effect), 
+            alpha = mean(alpha), 
+            # Smax = mean(Smax),
+            min_S = min(S),
+            K = mean(K),
+            Smsy = mean(Smsy),
+            generating_model = first(generating_model)) %>% 
+  pivot_longer(cols = c(sigma, alpha, K, Smsy), names_to = "parameter", values_to = "true_value")
+
+true_values_ric <- data_ric %>% 
+  group_by(sigma, alpha, K, Smsy) %>% 
+  summarize(sigma = mean(sigma), 
+            # forestry_effect = mean(forestry_effect), 
+            alpha = mean(alpha), 
+            # Smax = mean(Smax),
+            min_S = min(S),
+            K = mean(K),
+            Smsy = mean(Smsy),
+            generating_model = first(generating_model)) %>% 
+  pivot_longer(cols = c(sigma, alpha, K, Smsy), names_to = "parameter", values_to = "true_value")
+
+
+
+model_results_same_pars_df <- data.frame(clones = numeric(),
+                                         parameter = character(),
+                                         fitting_model = character(),
+                                         estimate_median = numeric(),
+                                         estimate_lower = numeric(),
+                                         estimate_upper = numeric(),
+                                         estimate_variance = numeric(),
+                                         Rhat = numeric(),
+                                         error = numeric(),
+                                         true_value = numeric(),
+                                         generating_model = character())
+                                     
+
+clones <- 25
+
+for(k in 1:clones){
+  
+  data_ric_cloned <- data_ric %>% 
+    slice(rep(1:n(), each = k + 1)) %>% 
+    mutate(clone_id = rep(1:(n()/nrow(data_ric)), each = nrow(data_ric))) 
+  
+  
+  data_bh_cloned <- data_bh %>% 
+    slice(rep(1:n(), each = k + 1)) %>% 
+    mutate(clone_id = rep(1:(n()/nrow(data_bh)), each = nrow(data_bh)))
+  
+  
+  
+  data_list_ric <- list(
+    N = nrow(data_ric_cloned),
+    year = data_ric_cloned$year,
+    spawners = data_ric_cloned$S,
+    ln_RS = data_ric_cloned$ln_RS,
+    # forestry = data$forestry,
+    Rk_mean = max(data_ric_cloned$R),
+    Rk_sigma = max(data_ric_cloned$R)*2,
+    Smax_mean = data_ric_cloned$S[which.max(data_ric_cloned$R)],
+    Smax_sigma = data_ric_cloned$S[which.max(data_ric_cloned$R)]*2,
+    prior_alpha = 5
+  )
+  
+  
+  data_list_bh <- list(
+    N = nrow(data_bh_cloned),
+    year = data_bh_cloned$year,
+    spawners = data_bh_cloned$S,
+    ln_RS = data_bh_cloned$ln_RS,
+    # forestry = data$forestry,
+    Rk_mean = max(data_bh_cloned$R),
+    Rk_sigma = max(data_bh_cloned$R)*2,
+    Smax_mean = data_bh_cloned$S[which.max(data_bh_cloned$R)],
+    Smax_sigma = data_bh_cloned$S[which.max(data_bh_cloned$R)]*2,
+    prior_alpha = 5
+  )
+  
+  
+  for(fit_model in fitting_model){
+    
+    
+    set.seed(12345+k)
+    
+    
+    
+    if(fit_model == "Beverton-Holt"){
+      
+      model_sampling_bh <- sim_bh_model$sample(data = data_list_bh,
+                                               iter_sampling  = 2000,
+                                               chains = 6,
+                                               iter_warmup = 1000)
+      
+      model_sampling_ric <- sim_bh_model$sample(data = data_list_ric,
+                                                iter_sampling  = 2000,
+                                                chains = 6,
+                                                iter_warmup = 1000)
+
+    } else if(fit_model == "Ricker"){
+      
+      model_sampling_bh <- sim_ric_model$sample(data = data_list_bh,
+                                                iter_sampling  = 2000,
+                                                chains = 6,
+                                                iter_warmup = 1000)
+      
+      model_sampling_ric <- sim_ric_model$sample(data = data_list_ric,
+                                                 iter_sampling  = 2000,
+                                                 chains = 6,
+                                                 iter_warmup = 1000)
+      
+
+    }
+    
+    Rhat_values_ric <- data.frame(Rhat = round(model_sampling_ric$summary()$rhat,3)) %>% 
+      mutate(parameter = model_sampling_ric$summary()$variable)
+    
+    Rhat_values_bh <- data.frame(Rhat = round(model_sampling_bh$summary()$rhat,3)) %>%
+      mutate(parameter = model_sampling_bh$summary()$variable)
+    
+    model_results_ric <- data.frame(model_sampling_ric$draws(variables=c("alpha", "sigma", "K", "Smsy"),format='draws_matrix')) %>%
+      mutate(fitting_model = fit_model, clones = k) %>%
+      select(fitting_model, alpha, sigma, K, Smsy, clones) %>% 
+      pivot_longer(cols = c(alpha, K, sigma, Smsy), names_to = "parameter", values_to = "value") %>%
+      group_by(fitting_model, parameter, clones) %>%
+      summarise(
+        estimate_median = round(median(value),2),
+        estimate_lower = round(quantile(value, 0.025),2),
+        estimate_upper = round(quantile(value, 0.975),2),
+        estimate_variance = round(var(value), 4)
+      ) %>%
+      ungroup() %>% 
+      
+      left_join(true_values_ric, by = "parameter") %>% 
+      left_join(Rhat_values_ric, by = "parameter") %>% 
+      # mutate(data_model = "Ricker") %>% 
+      mutate(error = 100*(estimate_median - true_value)/true_value)
+    
+    model_results_bh <- data.frame(model_sampling_bh$draws(variables=c("alpha", "sigma", "K", "Smsy"),format='draws_matrix')) %>%
+      mutate(fitting_model = fit_model, clones = k) %>%
+      select(fitting_model, alpha, sigma, K, Smsy, clones) %>% 
+      pivot_longer(cols = c(alpha, K, sigma, Smsy), names_to = "parameter", values_to = "value") %>%
+      group_by(fitting_model, parameter, clones) %>%
+      summarise(
+        estimate_median = round(median(value),2),
+        estimate_lower = round(quantile(value, 0.025),2),
+        estimate_upper = round(quantile(value, 0.975),2),
+        estimate_variance = round(var(value), 4)
+      ) %>%
+      ungroup() %>% 
+      
+      left_join(true_values_bh, by = "parameter") %>% 
+      left_join(Rhat_values_bh, by = "parameter") %>% 
+      # mutate(data_model = "Ricker") %>% 
+      mutate(error = 100*(estimate_median - true_value)/true_value)
+    
+    model_results_same_pars_df  <- model_results_same_pars_df  %>%
+      bind_rows(model_results_bh) %>% 
+      bind_rows(model_results_ric)
+  
+
+  }
+}
+
+model_results_same_pars_df_new <- model_results_same_pars_df %>% 
+  group_by(clones, generating_model, fitting_model) %>%
+  mutate(alpha = true_value[parameter == "alpha"],
+         sigma = true_value[parameter == "sigma"],
+         # b_for = true_value[parameter == "b_for"],
+         Smsy = true_value[parameter == "Smsy"],
+         K = true_value[parameter == "K"]
+  ) %>%
+  mutate(alpha_estimate = estimate_median[parameter == "alpha"],
+         sigma_estimate = estimate_median[parameter == "sigma"],
+         # b_for_estimate = estimate_median[parameter == "b_for"],
+         Smsy_estimate = estimate_median[parameter == "Smsy"],
+         K_estimate = estimate_median[parameter == "K"]
+  ) %>%
+  ungroup() 
+
+
+#scaling variance
+
+scaled_variance <- model_results_same_pars_df_new %>% 
+  select(estimate_variance, parameter, fitting_model, generating_model, clones) %>% 
+  group_by(parameter, fitting_model, generating_model) %>%
+  mutate(scaled_variance = estimate_variance/estimate_variance[clones==0]) %>% 
+  ungroup()
+
+
+#plot variance as a function of clones
+
+ggplot(scaled_variance )+
+  geom_line(aes(x = (clones+1), y = scaled_variance, group = parameter, 
+                color = parameter), size = 1.2, alpha = 0.5)+
+  facet_grid(generating_model~fitting_model, scales = "free", labeller = labeller(generating_model = c("Beverton-Holt" = "Generating Model: Beverton-Holt", 
+                                            "Ricker" = "Generating Model: Ricker"),
+                                              fitting_model = c("Beverton-Holt" = "Fitting Model: Beverton-Holt", 
+                                                                "Ricker" = "Fitting Model: Ricker"))) +
+  scale_color_brewer(palette = "Dark2")+
+  labs(x = "Number of Clones (k)", y = "Scaled Variance", color = "Parameter")+
+  stat_function(
+    fun = function(x) 1/x, 
+    aes(color = "Ideal (1/k)"), # Adds it to the legend
+    linetype = "dashed", 
+    size = 1,
+    alpha = 0.7
+  ) +
+  scale_color_manual(
+    values = c("Ideal (1/k)" = "black", 
+               "alpha" = "#1B9E77", 
+               "sigma" = "#D95F02", 
+               "K" = "#7570B3", 
+               "Smsy" = "#E7298A"),
+    name = "Parameter"
+  ) +
+  theme_classic()
+
+
+
+
+
+
+
