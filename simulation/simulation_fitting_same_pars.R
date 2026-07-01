@@ -590,7 +590,7 @@ data_list_ric <- list(
   prior_alpha = 5
 )
 
-nsims <- 1000
+nsims <- 100
 for(i in 1:nsims){
   
   print(i)
