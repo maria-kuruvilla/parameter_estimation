@@ -726,6 +726,7 @@ sim_bh_model <-  cmdstanr::cmdstan_model(file.path(here("simulation",
 
 sigma_fixed <- c(0.1,1.1)
 alpha_fixed <- c(1.1,5.1)
+K_fixed <- 10000
 
 for(sigma in sigma_fixed){
   for(alpha in alpha_fixed){
