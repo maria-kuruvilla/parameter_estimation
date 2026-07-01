@@ -331,26 +331,18 @@ data_bh <- data_bh %>%
 
 true_values_bh <- data_bh %>% 
   group_by(sigma, alpha, K, Smsy) %>% 
-  summarize(sigma = mean(sigma), 
-            # forestry_effect = mean(forestry_effect), 
-            alpha = mean(alpha), 
-            # Smax = mean(Smax),
-            min_S = min(S),
-            K = mean(K),
-            Smsy = mean(Smsy),
-            generating_model = first(generating_model)) %>% 
+  summarize(min_S = min(S),
+            generating_model = first(generating_model),
+            .groups = "drop") %>% 
   pivot_longer(cols = c(sigma, alpha, K, Smsy), names_to = "parameter", values_to = "true_value")
+
+
 
 true_values_ric <- data_ric %>% 
   group_by(sigma, alpha, K, Smsy) %>% 
-  summarize(sigma = mean(sigma), 
-            # forestry_effect = mean(forestry_effect), 
-            alpha = mean(alpha), 
-            # Smax = mean(Smax),
-            min_S = min(S),
-            K = mean(K),
-            Smsy = mean(Smsy),
-            generating_model = first(generating_model)) %>% 
+  summarize(min_S = min(S),
+            generating_model = first(generating_model),
+            .groups = "drop") %>% 
   pivot_longer(cols = c(sigma, alpha, K, Smsy), names_to = "parameter", values_to = "true_value")
 
 
@@ -368,19 +360,17 @@ model_results_same_pars_df <- data.frame(clones = numeric(),
                                          generating_model = character())
                                      
 
-clones <- 25
+clone_sequence <- c(1, 2, 4, 8, 16, 32)
 
-for(k in 1:clones){
+for(k in clone_sequence){
   
   data_ric_cloned <- data_ric %>% 
-    slice(rep(1:n(), each = k + 1)) %>% 
+    slice(rep(1:n(), each = k)) %>%   # Changed to 'each = k'
     mutate(clone_id = rep(1:(n()/nrow(data_ric)), each = nrow(data_ric))) 
   
-  
   data_bh_cloned <- data_bh %>% 
-    slice(rep(1:n(), each = k + 1)) %>% 
+    slice(rep(1:n(), each = k)) %>%   # Changed to 'each = k'
     mutate(clone_id = rep(1:(n()/nrow(data_bh)), each = nrow(data_bh)))
-  
   
   
   data_list_ric <- list(
@@ -512,29 +502,43 @@ model_results_same_pars_df_new <- model_results_same_pars_df %>%
   ungroup() 
 
 
+#save 
+
+write_csv(model_results_same_pars_df_new, here("simulation", "stan_models", "output", "data_cloning.csv"))
+
+
 #scaling variance
 
 scaled_variance <- model_results_same_pars_df_new %>% 
   select(estimate_variance, parameter, fitting_model, generating_model, clones) %>% 
   group_by(parameter, fitting_model, generating_model) %>%
-  mutate(scaled_variance = estimate_variance/estimate_variance[clones==0]) %>% 
+  mutate(scaled_variance = estimate_variance/estimate_variance[clones==1]) %>% 
   ungroup()
 
 
 #plot variance as a function of clones
 
+#plot variance as a function of clones
 ggplot(scaled_variance )+
-  geom_line(aes(x = (clones+1), y = scaled_variance, group = parameter, 
+  # Changed x to 'clones'
+  geom_line(aes(x = clones, y = scaled_variance, group = parameter, 
                 color = parameter), size = 1.2, alpha = 0.5)+
-  facet_grid(generating_model~fitting_model, scales = "free", labeller = labeller(generating_model = c("Beverton-Holt" = "Generating Model: Beverton-Holt", 
-                                            "Ricker" = "Generating Model: Ricker"),
-                                              fitting_model = c("Beverton-Holt" = "Fitting Model: Beverton-Holt", 
-                                                                "Ricker" = "Fitting Model: Ricker"))) +
-  scale_color_brewer(palette = "Dark2")+
+  geom_point(aes(x = clones, y = scaled_variance, color = parameter), size = 3) +
+  
+  facet_grid(generating_model~fitting_model, scales = "free", labeller = labeller(
+    generating_model = c("Beverton-Holt" = "Generating Model: Beverton-Holt", 
+                         "Ricker" = "Generating Model: Ricker"),
+    fitting_model = c("Beverton-Holt" = "Fitting Model: Beverton-Holt", 
+                      "Ricker" = "Fitting Model: Ricker"))) +
+  
+  # Log scale makes the 1/k curve a straight line, vastly improving readability
+  # scale_x_continuous(trans = "log2", breaks = c(1, 2, 4, 8, 16)) +
+  # scale_y_continuous(trans = "log2", breaks = c(0.001, 0.1, 0.5, 1)) +
+  # 
   labs(x = "Number of Clones (k)", y = "Scaled Variance", color = "Parameter")+
   stat_function(
     fun = function(x) 1/x, 
-    aes(color = "Ideal (1/k)"), # Adds it to the legend
+    aes(color = "Ideal (1/k)"), 
     linetype = "dashed", 
     size = 1,
     alpha = 0.7
