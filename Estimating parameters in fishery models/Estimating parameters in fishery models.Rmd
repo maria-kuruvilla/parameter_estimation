@@ -1,13 +1,14 @@
 ---
-word_document:
-  toc: true
 author:
 - name: Maria Kuruvilla
 author_summary: null
 output:
+  word_document: 
+    toc: true
   html_document:
+    toc: true
+    toc_float: true
     df_print: paged
-  word_document: null
   pdf_document: default
 bibliography: mybibfile.bib
 csl: http://www.zotero.org/styles/plos
@@ -47,7 +48,7 @@ Fish population dynamics models have been used for several decades to describe t
 
 <!-- We simulated data for log recruits per spawner $\ln(\frac{R}{S})$, also known as productivity, with the Beverton-Holt equation and the Ricker equation with randomly drawn values of $\alpha$, $\sigma$, $K$, and with empirical spawner data. We then fit both the Beverton-Holt model and the Ricker model in Bayesian framework to this data to estimate the same parameters. We plotted the median estimates of these parameters with  95% credible intervals along with the true values of the parameters to evaluate the accuracy and precision of the parameter estimates.  -->
 
-We simulated the population dynamics of salmon using two spawner recruit models - Ricker and Beverton-Holt. The simulation models containied submodels for recruitment, harvest and age-structure, with natural variability in recruitment, harvest, and age-at-maturity.
+We simulated the population dynamics of salmon using two spawner recruit models - Ricker and Beverton-Holt. The simulation models contained submodels for recruitment, harvest and age-structure, with natural variability in recruitment, harvest, and age-at-maturity.
 
 ### Base model
 
@@ -86,9 +87,9 @@ digraph G {
 
   # Default nodes
   node [shape = box, style = filled, fillcolor = '#f9f9f9', fontname = 'Helvetica', color = '#333333']
-  A [label = 'Draw Parameters']
+  A [label = 'Start Simulation']
   B [label = 'Initialize Spawners near K\\nfor t = 1 to maximum spawning age']
-  H [label = 'Post Processing\\ndiscard first 50 years, calculate $S_{MSY}$']
+  H [label = 'Discard Burn-in Period,\\n Calculate Derived Benchmarks\\ne.g., MSY']
 
   # Decision nodes (diamonds)
   node [shape = diamond, fillcolor = '#f9f9f9']
@@ -99,7 +100,7 @@ digraph G {
   node [shape = box, fillcolor = '#e1f5fe', color = '#36a2eb', penwidth = 2]
   D [label = 'Calculate Run Size:\\nSum returning ages from past brood years']
   E [label = 'Apply Harvest Rate:\\nCalculate Escapement']
-  F [label = 'Calculate Recruitment:\\nApply spawner recruitment model']
+  F [label = 'Calculate Recruitment:\\nApply Ricker/Beverton-Holt Model with environmental noise']
 
   # Connect the arrows
   A -> B
@@ -122,6 +123,10 @@ knitr::include_graphics("simulation_flowchart.png")
 ```
 
 
+We simulated 100 different datasets and fit both the Ricker model and the Beverton-Holt model to these datasets. We then estimated the parameters and compared them to the true values.
+
+
+
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 
 simulation_results_diff_pars <- read_csv(here("simulation",
@@ -133,21 +138,38 @@ simulation_results_diff_pars <- read_csv(here("simulation",
 ggplot(simulation_results_diff_pars %>% 
          filter(parameter == "alpha"), aes(x = alpha, y = estimate_median)) +
   # geom_point(aes(color = alpha),alpha = 0.5, size = 2) +
-  geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = Smsy), size = 0.5, alpha = 0.5)+
+  geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = sigma), size = 0.5, alpha = 0.5)+
   geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
   facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
   labs(x = "True alpha", y = "Estimated alpha") +
   # scale_color_gradient2(name = 'alpha',
   #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
-  scale_color_gradientn(name = 'Estimated S_msy',
+  scale_color_gradientn(name = 'sigma',
+                        colors = pal)+
+  theme_classic()
+
+ggplot(simulation_results_diff_pars %>% 
+         filter(parameter == "Smsy"), aes(x = Smsy, y = estimate_median)) +
+  # geom_point(aes(color = alpha),alpha = 0.5, size = 2) +
+  geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = sigma), size = 0.5, alpha = 0.5)+
+  coord_trans(y="log10") + 
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  scale_y_continuous(labels = scales::comma, breaks = c(1000, 10000, 100000)) +
+  
+  facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
+  labs(x = "True S_MSY", y = "Estimated S_MSY") +
+  # scale_color_gradient2(name = 'alpha',
+  #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
+  scale_color_gradientn(name = 'sigma',
                         colors = pal)+
   theme_classic()
 
 
 
+
 ```
 
-
+We then simulated 1 dataset with the same parameter values and fit the Ricker model and the Beverton-Holt model 1000 times. We then plotted the estimated median of the alpha parameter. 
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 
@@ -167,45 +189,42 @@ simulation_results_same_pars %>%
   scale_linetype_manual(name = "Generating model", values = c("Beverton-Holt" = "solid", "Ricker" = "dashed")) +
   theme_classic()
 
-simulation_results_same_pars %>%
-  filter(fitting_model == "Ricker") %>% 
-  ggplot() +
-  # geom_histogram(aes(x = alpha_estimate, fill = fitting_model), position = "dodge", bins = 30) +
-  geom_density(aes(x = alpha_estimate, fill = generating_model), alpha = 0.5, color = NA) +
-  geom_vline(aes(xintercept = alpha, color = "alpha"), lty = "dashed", size = 1) +
-  labs(title = "Distribution of alpha estimates for Ricker fitting model", x = "Alpha estimate", y = "Density") +
-  scale_fill_manual(name = "Generating model", values = c( "#807182","#99C2A2")) +
-  scale_color_manual(name = "True value", values = c("alpha" = "slategray")) +
-  theme_classic()
 
 
-simulation_results_same_pars_low_alpha <- read_csv(here("simulation",
-                                              "stan_models",
-                                              "output",
-                                              "simulation_fitting_results_w_age_same_pars_low_alpha_low_sigma_100.csv"))
-
-simulation_results_same_pars_low_alpha %>%
-  # filter(fitting_model == "Ricker", generating_model == "Ricker") %>% 
-  ggplot() +
-  # geom_histogram(aes(x = alpha_estimate, fill = fitting_model), position = "dodge", bins = 30) +
-  geom_density(aes(x = alpha_estimate, fill = fitting_model, lty = generating_model), alpha = 0.5, color = "black") +
-  geom_vline(aes(xintercept = alpha, color = "alpha"), lty = "dashed", size = 1) +
-  xlim(0,3)+
-  labs(title = "Distribution of alpha estimates for BH and Ricker fitting models", x = "Alpha estimate", y = "Density") +
-  scale_fill_manual(name = "Fitting model", values = c( "#807182","#99C2A2")) +
-  scale_color_manual(name = "True value", values = c("alpha" = "slategray")) +
-  scale_linetype_manual(name = "Generating model", values = c("Beverton-Holt" = "solid", "Ricker" = "dashed")) +
-  theme_classic()
+# simulation_results_same_pars_low_alpha <- read_csv(here("simulation",
+#                                               "stan_models",
+#                                               "output",
+#                                               "simulation_fitting_results_w_age_same_pars_low_alpha_low_sigma_100.csv"))
+# 
+# simulation_results_same_pars_low_alpha %>%
+#   # filter(fitting_model == "Ricker", generating_model == "Ricker") %>% 
+#   ggplot() +
+#   # geom_histogram(aes(x = alpha_estimate, fill = fitting_model), position = "dodge", bins = 30) +
+#   geom_density(aes(x = alpha_estimate, fill = fitting_model, lty = generating_model), alpha = 0.5, color = "black") +
+#   geom_vline(aes(xintercept = alpha, color = "alpha"), lty = "dashed", size = 1) +
+#   xlim(0,3)+
+#   labs(title = "Distribution of alpha estimates for BH and Ricker fitting models", x = "Alpha estimate", y = "Density") +
+#   scale_fill_manual(name = "Fitting model", values = c( "#807182","#99C2A2")) +
+#   scale_color_manual(name = "True value", values = c("alpha" = "slategray")) +
+#   scale_linetype_manual(name = "Generating model", values = c("Beverton-Holt" = "solid", "Ricker" = "dashed")) +
+#   theme_classic()
 
 
 ```
+
+
+In addition to simulating data from the base model, we simulated data with covariates: 1) Sea-surface temperature (SST), 2) Forestry. 
 
 
 ### Model with one covariate
 
 #### SST
 
-### Beverton-Holt Equation
+
+We used Extended Reconstructed Sea-Surface Temperature from the NOAA website from 1925 to 2025.
+
+
+##### Beverton-Holt Model
 
 $\ln(\frac{R}{S}) = e^{\alpha} - \ln(1 + \frac{e^{\alpha} S}{R_k}) + \beta SST + \epsilon$
 
@@ -213,13 +232,18 @@ $R_K = \frac{K}{e^{\alpha}-1}$
 
 $\epsilon \sim N(0,\sigma)$
 
-### Ricker Equation
+##### Ricker Model
 
 $\ln(\frac{R}{S}) = \alpha - \frac{S}{S_{max}} + \beta SST + \epsilon$
 
 $S_{max} = \frac{K}{\alpha}$
 
 $\epsilon \sim N(0,\sigma)$
+
+
+
+
+
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 
@@ -229,33 +253,18 @@ simulation_results_diff_pars_w_covariate <- read_csv(here("simulation",
                                               "simulation_fitting_results_w_covariate_sst_100.csv"))
 
  
-ggplot(simulation_results_diff_pars_w_covariate %>% 
-         filter(parameter == "alpha"), aes(x = alpha, y = estimate_median)) +
-  # geom_point(aes(color = alpha),alpha = 0.5, size = 2) +
-  geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = sigma), size = 0.5, alpha = 0.5)+
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
-  facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
-  labs(x = "True alpha", y = "Estimated alpha") +
-  # scale_color_gradient2(name = 'alpha',
-  #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
-  scale_color_gradientn(name = 'sigma',
-                        colors = pal)+
-  theme_classic()
-
-
- 
-ggplot(simulation_results_diff_pars_w_covariate %>% 
-         filter(parameter == "alpha"), aes(x = alpha, y = estimate_median)) +
-  # geom_point(aes(color = alpha),alpha = 0.5, size = 2) +
-  geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = min_S), size = 0.5, alpha = 0.5)+
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
-  facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
-  labs(x = "True alpha", y = "Estimated alpha") +
-  # scale_color_gradient2(name = 'alpha',
-  #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
-  scale_color_gradientn(name = 'min(Spawners)',
-                        colors = pal)+
-  theme_classic()
+# ggplot(simulation_results_diff_pars_w_covariate %>% 
+#          filter(parameter == "alpha"), aes(x = alpha, y = estimate_median)) +
+#   # geom_point(aes(color = alpha),alpha = 0.5, size = 2) +
+#   geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = sigma), size = 0.5, alpha = 0.5)+
+#   geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+#   facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
+#   labs(x = "True alpha", y = "Estimated alpha") +
+#   # scale_color_gradient2(name = 'alpha',
+#   #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
+#   scale_color_gradientn(name = 'sigma',
+#                         colors = pal)+
+#   theme_classic()
 
 
 ggplot(simulation_results_diff_pars_w_covariate %>% 
@@ -264,7 +273,7 @@ ggplot(simulation_results_diff_pars_w_covariate %>%
   geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = sigma), size = 0.5, alpha = 0.5)+
   geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
   facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
-  labs(x = "True alpha", y = "Estimated alpha") +
+  labs(x = "True beta", y = "Estimated beta") +
   # scale_color_gradient2(name = 'alpha',
   #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
   scale_color_gradientn(name = 'sigma',
@@ -275,10 +284,13 @@ ggplot(simulation_results_diff_pars_w_covariate %>%
 
 ```
 
-
 #### Forestry
 
-### Beverton-Holt Model
+
+For the forestry data, we used the cumulative disturbed area in the Carnation Creek watershed as the covariate. This is a monotonically increasing covariate.
+
+
+##### Beverton-Holt Model
 
 $\ln(\frac{R}{S}) = e^{\alpha} - \ln(1 + \frac{e^{\alpha} S}{R_k}) + \beta Forestry + \epsilon$
 
@@ -286,7 +298,7 @@ $R_K = \frac{K}{e^{\alpha}-1}$
 
 $\epsilon \sim N(0,\sigma)$
 
-### Ricker Model
+##### Ricker Model
 
 $\ln(\frac{R}{S}) = \alpha - \frac{S}{S_{max}} + \beta Forestry + \epsilon$
 
@@ -304,18 +316,18 @@ simulation_results_diff_pars_w_covariate_for <- read_csv(here("simulation",
                                               "simulation_fitting_results_w_covariate_forestry_100.csv"))
 
  
-ggplot(simulation_results_diff_pars_w_covariate_for %>% 
-         filter(parameter == "alpha"), aes(x = alpha, y = estimate_median)) +
-  # geom_point(aes(color = alpha),alpha = 0.5, size = 2) +
-  geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = sigma), size = 0.5, alpha = 0.5)+
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
-  facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
-  labs(x = "True alpha", y = "Estimated alpha") +
-  # scale_color_gradient2(name = 'alpha',
-  #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
-  scale_color_gradientn(name = 'sigma',
-                        colors = pal)+
-  theme_classic()
+# ggplot(simulation_results_diff_pars_w_covariate_for %>% 
+#          filter(parameter == "alpha"), aes(x = alpha, y = estimate_median)) +
+#   # geom_point(aes(color = alpha),alpha = 0.5, size = 2) +
+#   geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = sigma), size = 0.5, alpha = 0.5)+
+#   geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+#   facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
+#   labs(x = "True alpha", y = "Estimated alpha") +
+#   # scale_color_gradient2(name = 'alpha',
+#   #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
+#   scale_color_gradientn(name = 'sigma',
+#                         colors = pal)+
+#   theme_classic()
 
 
  
@@ -327,7 +339,7 @@ ggplot(simulation_results_diff_pars_w_covariate_for %>%
   geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = sigma), size = 0.5, alpha = 0.5)+
   geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
   facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
-  labs(x = "True alpha", y = "Estimated alpha") +
+  labs(x = "True beta", y = "Estimated beta") +
   # scale_color_gradient2(name = 'alpha',
   #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
   scale_color_gradientn(name = 'sigma',
@@ -337,6 +349,74 @@ ggplot(simulation_results_diff_pars_w_covariate_for %>%
 
 
 ```
+
+
+## Data Cloning
+
+To test parameter estimability using data cloning, we cloned the data $k$ times, we then fit the Ricker model and the Beverton-Holt model in a Bayesian framework to this dataset. We plotted the posterior variance of the alpha parameter to evaluate the rate of shrinkage of the posterior variance. If the parameter is non-estimable or practically inestimable, the posterior variance will not shrink towards 0 [@Peacock_Krkošek_Lewis_Lele_2017].
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+data_cloning <- read_csv(here("simulation",
+                                              "stan_models",
+                                              "output",
+                                              "data_cloning.csv"))
+
+ 
+#scaling variance
+
+scaled_variance <- data_cloning %>% 
+  select(estimate_variance, parameter, fitting_model, generating_model, clones) %>% 
+  group_by(parameter, fitting_model, generating_model) %>%
+  mutate(scaled_variance = estimate_variance/estimate_variance[clones==1]) %>% 
+  ungroup()
+
+
+#plot variance as a function of clones
+
+#plot variance as a function of clones
+ggplot(scaled_variance )+
+  # Changed x to 'clones'
+  geom_line(aes(x = clones, y = scaled_variance, group = parameter, 
+                color = parameter), size = 1.2, alpha = 0.5)+
+  geom_point(aes(x = clones, y = scaled_variance, color = parameter), size = 3, alpha = 0.2) +
+  
+  facet_grid(generating_model~fitting_model, scales = "free", labeller = labeller(
+    generating_model = c("Beverton-Holt" = "Generating Model: Beverton-Holt", 
+                         "Ricker" = "Generating Model: Ricker"),
+    fitting_model = c("Beverton-Holt" = "Fitting Model: Beverton-Holt", 
+                      "Ricker" = "Fitting Model: Ricker"))) +
+  
+  # Log scale makes the 1/k curve a straight line, vastly improving readability
+  # scale_x_continuous(trans = "log2", breaks = c(1, 2, 4, 8, 16)) +
+  # scale_y_continuous(trans = "log2", breaks = c(0.001, 0.1, 0.5, 1)) +
+  # 
+  labs(x = "Number of Clones (k)", y = "Scaled Variance", color = "Parameter")+
+  stat_function(
+    fun = function(x) 1/x, 
+    aes(color = "Ideal (1/k)"), 
+    linetype = "dashed", 
+    size = 1,
+    alpha = 0.7
+  ) +
+  scale_color_manual(
+    values = c("Ideal (1/k)" = "black", 
+               "alpha" = "#1B9E77", 
+               "sigma" = "#D95F02", 
+               "K" = "#7570B3", 
+               "Smsy" = "#E7298A"),
+    name = "Parameter"
+  ) +
+  theme_classic()
+
+
+
+
+
+
+```
+
 
 
 
@@ -354,11 +434,8 @@ ggplot(simulation_results_diff_pars_w_covariate_for %>%
 
 Profile likelihood is a statistical tool that can be used to determine whether a parameter is identifiable, practically unidentifiable, or structurally unidentifiable [@Raue_2009]. We plot the profile likelihood of $\alpha$, and $K$ parameters of both the Ricker model and the Beverton-Holt model after fitting these models to data generated from both the Beverton-Holt equation and the Ricker equation.
 
-<!-- To do: -->
 
-<!-- -   Generate multiple datasets with data at low and high spawner levels -->
-<!-- -   Plot the profile likelihood of the model parameters for multiple datasets -->
-<!-- -   Plot the profile likelihood of alpha in BH by keeping K fixed. -->
+
 
 
 ## Significance
@@ -366,6 +443,14 @@ Profile likelihood is a statistical tool that can be used to determine whether a
 The Beverton-Holt model and the Ricker model differ in their assumptions about density-dependence at high spawner levels. The structural differences in the two models lead to variation in parameter estimation. The Beverton-Holt model usually overestimates $\alpha$ and carrying capacity while the Ricker model usually underestimates them [@Zhou_2007]. While the Beverton-Holt model is usually a better statistical fit, the Ricker model is usually recommended because it is less sensitive to the priors and as a precautionary option to avoid over harvesting [@Godbout_Fu_Irvine]. A failure to represent population dynamics accurately can result in endangering populations by overharvesting and also loss of credibility in the modelling process.
 
 Using a Bayesian approach allows us to quantify the full uncertainty associated with all parameters and metrics of interest, such as harvest targets. However, having high levels of uncetainty are unhelpful with management decisions. It is useful to know when the model structure leads to high levels of uncertainty in the parameters and metrics of interest. We can then use this information to make informed decisions about which model to use for specific datasets and to be cautious about the interpretation of the results.
+
+<!-- To do: -->
+
+<!-- -   Generate multiple datasets with data at low and high spawner levels -->
+<!-- -   Plot the profile likelihood of the model parameters for multiple datasets -->
+<!-- -   Plot the profile likelihood of alpha in BH by keeping K fixed. -->
+
+
 
 <!-- # Introduction -->
 

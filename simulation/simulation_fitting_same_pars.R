@@ -742,82 +742,84 @@ for(sigma in sigma_fixed){
                                              Rhat = numeric(),
                                              error = numeric())
     
-    set.seed(3241)
     
-    data_ric <- ric_function_w_age(mean_harvest = 0.3, 
+    
+    nsims <- 500
+    
+    for(i in 1:nsims){
+      
+      print(paste("Simulation", i, "with alpha =", alpha, "and sigma =", sigma))
+      
+      set.seed(12345+i)
+      
+      data_ric <- ric_function_w_age(mean_harvest = 0.3, 
+                                     sd_harvest = 0.2, 
+                                     K = K_fixed, 
+                                     alpha = alpha, 
+                                     sigma = sigma, 
+                                     ages = chum_ages, 
+                                     p_mean = chum_p_mean) 
+      
+      data_ric$generating_model <- "Ricker"
+      
+      data_ric <- data_ric %>% 
+        filter(!is.nan(ln_RS), !is.infinite(ln_RS))
+      
+      data_bh <- bh_function_w_age(mean_harvest = 0.3, 
                                    sd_harvest = 0.2, 
                                    K = K_fixed, 
                                    alpha = alpha, 
                                    sigma = sigma, 
                                    ages = chum_ages, 
-                                   p_mean = chum_p_mean) 
-    
-    data_ric$generating_model <- "Ricker"
-    
-    data_ric <- data_ric %>% 
-      filter(!is.nan(ln_RS), !is.infinite(ln_RS))
-    
-    data_bh <- bh_function_w_age(mean_harvest = 0.3, 
-                                 sd_harvest = 0.2, 
-                                 K = K_fixed, 
-                                 alpha = alpha, 
-                                 sigma = sigma, 
-                                 ages = chum_ages, 
-                                 p_mean = chum_p_mean)
-    
-    data_bh$generating_model <- "Beverton-Holt"
-    
-    data_bh <- data_bh %>% 
-      filter(!is.nan(ln_RS), !is.infinite(ln_RS))
-    
-    true_values_bh <- data_bh %>% 
-      group_by(sigma, alpha, K, Smsy) %>% 
-      summarize(min_S = min(S),
-                generating_model = first(generating_model),
-                .groups = "drop") %>% 
-      pivot_longer(cols = c(sigma, alpha, K, Smsy), names_to = "parameter", values_to = "true_value")
-    
-    
-    
-    true_values_ric <- data_ric %>% 
-      group_by(sigma, alpha, K, Smsy) %>% 
-      summarize(min_S = min(S),
-                generating_model = first(generating_model),
-                .groups = "drop") %>% 
-      pivot_longer(cols = c(sigma, alpha, K, Smsy), names_to = "parameter", values_to = "true_value")
-    
-    
-    data_list_bh <- list(
-      N = nrow(data_bh),
-      year = data_bh$year,
-      spawners = data_bh$S,
-      ln_RS = data_bh$ln_RS,
-      # forestry = data$forestry,
-      Rk_mean = max(data_bh$R),
-      Rk_sigma = max(data_bh$R)*2,
-      Smax_mean = data_bh$S[which.max(data_bh$R)],
-      Smax_sigma = data_bh$S[which.max(data_bh$R)]*2,
-      prior_alpha = 5
-    )
-    
-    data_list_ric <- list(
-      N = nrow(data_ric),
-      year = data_ric$year,
-      spawners = data_ric$S,
-      ln_RS = data_ric$ln_RS,
-      # forestry = data$forestry,
-      Rk_mean = max(data_ric$R),
-      Rk_sigma = max(data_ric$R)*2,
-      Smax_mean = data_ric$S[which.max(data_ric$R)],
-      Smax_sigma = data_ric$S[which.max(data_ric$R)]*2,
-      prior_alpha = 5
-    )
-    
-    nsims <- 1000
-    
-    for(i in 1:nsims){
+                                   p_mean = chum_p_mean)
       
-      print(paste("Simulation", i, "with alpha =", alpha, "and sigma =", sigma))
+      data_bh$generating_model <- "Beverton-Holt"
+      
+      data_bh <- data_bh %>% 
+        filter(!is.nan(ln_RS), !is.infinite(ln_RS))
+      
+      true_values_bh <- data_bh %>% 
+        group_by(sigma, alpha, K, Smsy) %>% 
+        summarize(min_S = min(S),
+                  generating_model = first(generating_model),
+                  .groups = "drop") %>% 
+        pivot_longer(cols = c(sigma, alpha, K, Smsy), names_to = "parameter", values_to = "true_value")
+      
+      
+      
+      true_values_ric <- data_ric %>% 
+        group_by(sigma, alpha, K, Smsy) %>% 
+        summarize(min_S = min(S),
+                  generating_model = first(generating_model),
+                  .groups = "drop") %>% 
+        pivot_longer(cols = c(sigma, alpha, K, Smsy), names_to = "parameter", values_to = "true_value")
+      
+      
+      data_list_bh <- list(
+        N = nrow(data_bh),
+        year = data_bh$year,
+        spawners = data_bh$S,
+        ln_RS = data_bh$ln_RS,
+        # forestry = data$forestry,
+        Rk_mean = max(data_bh$R),
+        Rk_sigma = max(data_bh$R)*2,
+        Smax_mean = data_bh$S[which.max(data_bh$R)],
+        Smax_sigma = data_bh$S[which.max(data_bh$R)]*2,
+        prior_alpha = 5
+      )
+      
+      data_list_ric <- list(
+        N = nrow(data_ric),
+        year = data_ric$year,
+        spawners = data_ric$S,
+        ln_RS = data_ric$ln_RS,
+        # forestry = data$forestry,
+        Rk_mean = max(data_ric$R),
+        Rk_sigma = max(data_ric$R)*2,
+        Smax_mean = data_ric$S[which.max(data_ric$R)],
+        Smax_sigma = data_ric$S[which.max(data_ric$R)]*2,
+        prior_alpha = 5
+      )
       
       for(fit_model in fitting_model){
         
@@ -936,6 +938,47 @@ for(sigma in sigma_fixed){
   }
   
 }
+
+
+
+
+if(Sys.info()[1] == "Windows") {
+  
+  
+  pal <- PNWColors::pnw_palette("Starfish", 5)
+  
+  simulation_results_same_pars <- read_csv(here("simulation",
+                                                "stan_models",
+                                                "output",
+                                                "simulation_fitting_results_w_age_same_pars_alpha_5.1_sigma_1.1_10.csv"))
+  
+  simulation_results_same_pars %>%
+    ggplot() +
+    # geom_histogram(aes(x = alpha_estimate, fill = fitting_model), position = "dodge", bins = 30) +
+    geom_density(aes(x = alpha_estimate, fill = fitting_model, lty = generating_model), alpha = 0.5, color = "black") +
+    geom_vline(aes(xintercept = alpha, color = "alpha"), lty = "dashed", size = 1) +
+    labs(title = "Distribution of alpha estimates for BH and Ricker fitting models", x = "Alpha estimate", y = "Density") +
+    scale_fill_manual(name = "Fitting model", values = c( "#807182","#99C2A2")) +
+    scale_color_manual(name = "True value", values = c("alpha" = "slategray")) +
+    scale_linetype_manual(name = "Generating model", values = c("Beverton-Holt" = "solid", "Ricker" = "dashed")) +
+    theme_classic()
+  
+  
+  
+  
+  
+  
+} else{
+  print("running on server")
+  
+  
+  
+}
+
+
+
+
+
 
     
     
