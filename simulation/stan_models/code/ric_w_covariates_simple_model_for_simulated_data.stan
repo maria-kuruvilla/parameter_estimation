@@ -52,6 +52,8 @@ generated quantities {
   //   yrep[i] = normal_rng(alpha - spawners[i]/Smax + b_for*forestry[i], sigma);
   // }
   real Smsy;
+  real msy;
+  real Umsy;
   real z;
   real w;
   real K;
@@ -63,6 +65,9 @@ generated quantities {
   w = lambert_w0(exp(1 - alpha));
 
   Smsy = (1-w)*Smax;
-
+  
+  msy = (Smsy*exp(alpha - Smsy/Smax)) - Smsy;
+  
+  Umsy = msy/(Smsy + msy);
   
 }

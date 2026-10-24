@@ -54,11 +54,17 @@ generated quantities {
   // 
   
   real Smsy;
+  real msy;
+  real Umsy;
   real K;
 
   K = Rk*(exp(alpha) - 1)/exp(alpha);
 
   Smsy = K/(exp(alpha/2)+1);
+  
+  msy = K*(exp(alpha/2) - 1)/(exp(alpha/2) + 1);
+  
+  Umsy = 1 - exp(-alpha/2);
 
 
 
