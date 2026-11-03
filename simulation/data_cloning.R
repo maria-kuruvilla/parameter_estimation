@@ -555,6 +555,600 @@ ggplot(scaled_variance )+
 
 
 
+###### low sigma
+
+#do same data cloning for high S and very low sigma - 0.25
+
+alpha_fixed <- 1.1
+sigma_fixed <- 0.25
+K_fixed = 10000
+
+set.seed(3241)
+
+data_ric_low_sigma <- ric_function_w_age(mean_harvest = 0.3, 
+                               sd_harvest = 0.2, 
+                               K = K_fixed, 
+                               alpha = alpha_fixed, 
+                               sigma = sigma_fixed, 
+                               ages = chum_ages, 
+                               p_mean = chum_p_mean) 
+
+data_ric_low_sigma$generating_model <- "Ricker"
+
+data_ric_low_sigma <- data_ric_low_sigma %>% 
+  filter(!is.nan(ln_RS), !is.infinite(ln_RS))
+
+
+data_bh_low_sigma <- bh_function_w_age(mean_harvest = 0.3, 
+                             sd_harvest = 0.2, 
+                             K = K_fixed, 
+                             alpha = alpha_fixed, 
+                             sigma = sigma_fixed, 
+                             ages = chum_ages, 
+                             p_mean = chum_p_mean) 
+
+data_bh_low_sigma$generating_model <- "Beverton-Holt"
+
+data_bh_low_sigma <- data_bh_low_sigma %>% 
+  filter(!is.nan(ln_RS), !is.infinite(ln_RS))
+
+true_values_bh_low_sigma <- data_bh_low_sigma %>% 
+  group_by(sigma, alpha, K, Smsy) %>% 
+  summarize(min_S = min(S),
+            generating_model = first(generating_model),
+            .groups = "drop") %>% 
+  pivot_longer(cols = c(sigma, alpha, K, Smsy), names_to = "parameter", values_to = "true_value")
+
+
+
+true_values_ric_low_sigma <- data_ric_low_sigma %>% 
+  group_by(sigma, alpha, K, Smsy) %>% 
+  summarize(min_S = min(S),
+            generating_model = first(generating_model),
+            .groups = "drop") %>% 
+  pivot_longer(cols = c(sigma, alpha, K, Smsy), names_to = "parameter", values_to = "true_value")
+
+
+
+model_results_same_pars_df_low_sigma <- data.frame(clones = numeric(),
+                                         parameter = character(),
+                                         fitting_model = character(),
+                                         estimate_median = numeric(),
+                                         estimate_lower = numeric(),
+                                         estimate_upper = numeric(),
+                                         estimate_variance = numeric(),
+                                         Rhat = numeric(),
+                                         error = numeric(),
+                                         true_value = numeric(),
+                                         generating_model = character())
+
+
+for(k in 1:25){
+  
+  data_ric_cloned_low_sigma <- data_ric_low_sigma %>% 
+    slice(rep(1:n(), each = k)) %>%   # Changed to 'each = k'
+    mutate(clone_id = rep(1:(n()/nrow(data_ric_low_sigma)), each = nrow(data_ric_low_sigma))) 
+  
+  data_bh_cloned_low_sigma <- data_bh_low_sigma %>% 
+    slice(rep(1:n(), each = k)) %>%   # Changed to 'each = k'
+    mutate(clone_id = rep(1:(n()/nrow(data_bh_low_sigma)), each = nrow(data_bh_low_sigma)))
+  
+  
+  data_list_ric <- list(
+    N = nrow(data_ric_cloned_low_sigma),
+    year = data_ric_cloned_low_sigma$year,
+    spawners = data_ric_cloned_low_sigma$S,
+    ln_RS = data_ric_cloned_low_sigma$ln_RS,
+    # forestry = data$forestry,
+    Rk_mean = max(data_ric_cloned_low_sigma$R),
+    Rk_sigma = max(data_ric_cloned_low_sigma$R)*2,
+    Smax_mean = data_ric_cloned_low_sigma$S[which.max(data_ric_cloned_low_sigma$R)],
+    Smax_sigma = data_ric_cloned_low_sigma$S[which.max(data_ric_cloned_low_sigma$R)]*2,
+    prior_alpha = 5
+  )
+  
+  
+  data_list_bh <- list(
+    N = nrow(data_bh_cloned_low_sigma),
+    year = data_bh_cloned_low_sigma$year,
+    spawners = data_bh_cloned_low_sigma$S,
+    ln_RS = data_bh_cloned_low_sigma$ln_RS,
+    # forestry = data$forestry,
+    Rk_mean = max(data_bh_cloned_low_sigma$R),
+    Rk_sigma = max(data_bh_cloned_low_sigma$R)*2,
+    Smax_mean = data_bh_cloned_low_sigma$S[which.max(data_bh_cloned_low_sigma$R)],
+    Smax_sigma = data_bh_cloned_low_sigma$S[which.max(data_bh_cloned_low_sigma$R)]*2,
+    prior_alpha = 5
+  )
+  
+  
+  for(fit_model in fitting_model){
+    
+    
+    set.seed(12345+k)
+    
+    
+    
+    if(fit_model == "Beverton-Holt"){
+      
+      model_sampling_bh <- sim_bh_model$sample(data = data_list_bh,
+                                               iter_sampling  = 2000,
+                                               chains = 6,
+                                               iter_warmup = 1000)
+      
+      model_sampling_ric <- sim_bh_model$sample(data = data_list_ric,
+                                                iter_sampling  = 2000,
+                                                chains = 6,
+                                                iter_warmup = 1000)
+      
+    } else if(fit_model == "Ricker"){
+      
+      model_sampling_bh <- sim_ric_model$sample(data = data_list_bh,
+                                                iter_sampling  = 2000,
+                                                chains = 6,
+                                                iter_warmup = 1000)
+      
+      model_sampling_ric <- sim_ric_model$sample(data = data_list_ric,
+                                                 iter_sampling  = 2000,
+                                                 chains = 6,
+                                                 iter_warmup = 1000)
+      
+      
+    }
+    
+    Rhat_values_ric <- data.frame(Rhat = round(model_sampling_ric$summary()$rhat,3)) %>% 
+      mutate(parameter = model_sampling_ric$summary()$variable)
+    
+    Rhat_values_bh <- data.frame(Rhat = round(model_sampling_bh$summary()$rhat,3)) %>%
+      mutate(parameter = model_sampling_bh$summary()$variable)
+    
+    model_results_ric <- data.frame(model_sampling_ric$draws(variables=c("alpha", "sigma", "K", "Smsy"),format='draws_matrix')) %>%
+      mutate(fitting_model = fit_model, clones = k) %>%
+      select(fitting_model, alpha, sigma, K, Smsy, clones) %>% 
+      pivot_longer(cols = c(alpha, K, sigma, Smsy), names_to = "parameter", values_to = "value") %>%
+      group_by(fitting_model, parameter, clones) %>%
+      summarise(
+        estimate_median = round(median(value),2),
+        estimate_lower = round(quantile(value, 0.025),2),
+        estimate_upper = round(quantile(value, 0.975),2),
+        estimate_variance = round(var(value), 4)
+      ) %>%
+      ungroup() %>% 
+      
+      left_join(true_values_ric, by = "parameter") %>% 
+      left_join(Rhat_values_ric, by = "parameter") %>% 
+      # mutate(data_model = "Ricker") %>% 
+      mutate(error = 100*(estimate_median - true_value)/true_value)
+    
+    model_results_bh <- data.frame(model_sampling_bh$draws(variables=c("alpha", "sigma", "K", "Smsy"),format='draws_matrix')) %>%
+      mutate(fitting_model = fit_model, clones = k) %>%
+      select(fitting_model, alpha, sigma, K, Smsy, clones) %>% 
+      pivot_longer(cols = c(alpha, K, sigma, Smsy), names_to = "parameter", values_to = "value") %>%
+      group_by(fitting_model, parameter, clones) %>%
+      summarise(
+        estimate_median = round(median(value),2),
+        estimate_lower = round(quantile(value, 0.025),2),
+        estimate_upper = round(quantile(value, 0.975),2),
+        estimate_variance = round(var(value), 4)
+      ) %>%
+      ungroup() %>% 
+      
+      left_join(true_values_bh, by = "parameter") %>% 
+      left_join(Rhat_values_bh, by = "parameter") %>% 
+      # mutate(data_model = "Ricker") %>% 
+      mutate(error = 100*(estimate_median - true_value)/true_value)
+    
+    model_results_same_pars_df_low_sigma  <- model_results_same_pars_df_low_sigma  %>%
+      bind_rows(model_results_bh) %>% 
+      bind_rows(model_results_ric)
+    
+    
+  }
+}
+
+model_results_same_pars_df_new_low_sigma <- model_results_same_pars_df_low_sigma %>% 
+  group_by(clones, generating_model, fitting_model) %>%
+  mutate(alpha = true_value[parameter == "alpha"],
+         sigma = true_value[parameter == "sigma"],
+         # b_for = true_value[parameter == "b_for"],
+         Smsy = true_value[parameter == "Smsy"],
+         K = true_value[parameter == "K"]
+  ) %>%
+  mutate(alpha_estimate = estimate_median[parameter == "alpha"],
+         sigma_estimate = estimate_median[parameter == "sigma"],
+         # b_for_estimate = estimate_median[parameter == "b_for"],
+         Smsy_estimate = estimate_median[parameter == "Smsy"],
+         K_estimate = estimate_median[parameter == "K"]
+  ) %>%
+  ungroup() 
+
+
+#save 
+
+write_csv(model_results_same_pars_df_new_low_sigma, here("simulation", "stan_models", "output", "data_cloning_low_sigma.csv"))
+
+
+#scaling variance
+
+scaled_variance_low_sigma <- model_results_same_pars_df_new_low_sigma %>% 
+  select(estimate_variance, parameter, fitting_model, generating_model, clones) %>% 
+  group_by(parameter, fitting_model, generating_model) %>%
+  mutate(scaled_variance = estimate_variance/estimate_variance[clones==1]) %>% 
+  ungroup()
+
+#plot variance as a function of clones
+ggplot(scaled_variance_low_sigma)+
+  # Changed x to 'clones'
+  geom_line(aes(x = clones, y = scaled_variance, group = parameter, 
+                color = parameter), size = 1.2, alpha = 0.5)+
+  geom_point(aes(x = clones, y = scaled_variance, color = parameter), size = 3) +
+  
+  facet_grid(generating_model~fitting_model, scales = "free", labeller = labeller(
+    generating_model = c("Beverton-Holt" = "Generating Model: Beverton-Holt", 
+                         "Ricker" = "Generating Model: Ricker"),
+    fitting_model = c("Beverton-Holt" = "Fitting Model: Beverton-Holt", 
+                      "Ricker" = "Fitting Model: Ricker"))) +
+  
+  # Log scale makes the 1/k curve a straight line, vastly improving readability
+  # scale_x_continuous(trans = "log2", breaks = c(1, 2, 4, 8, 16)) +
+  # scale_y_continuous(trans = "log2", breaks = c(0.001, 0.1, 0.5, 1)) +
+  # 
+  labs(x = "Number of Clones (k)", y = "Scaled Variance", color = "Parameter")+
+  stat_function(
+    fun = function(x) 1/x, 
+    aes(color = "Ideal (1/k)"), 
+    linetype = "dashed", 
+    size = 1,
+    alpha = 0.7
+  ) +
+  scale_color_manual(
+    values = c("Ideal (1/k)" = "black", 
+               "alpha" = "#1B9E77", 
+               "sigma" = "#D95F02", 
+               "K" = "#7570B3", 
+               "Smsy" = "#E7298A"),
+    name = "Parameter"
+  ) +
+  theme_classic()
+
+
+###### high sigma
+
+#do same data cloning for high S and very high sigma - 1.5
+
+alpha_fixed <- 1.1
+sigma_fixed <- 1.5
+K_fixed = 10000
+
+set.seed(3241)
+
+data_ric_high_sigma <- ric_function_w_age(mean_harvest = 0.3, 
+                                         sd_harvest = 0.2, 
+                                         K = K_fixed, 
+                                         alpha = alpha_fixed, 
+                                         sigma = sigma_fixed, 
+                                         ages = chum_ages, 
+                                         p_mean = chum_p_mean) 
+
+data_ric_high_sigma$generating_model <- "Ricker"
+
+data_ric_high_sigma <- data_ric_high_sigma %>% 
+  filter(!is.nan(ln_RS), !is.infinite(ln_RS))
+
+
+data_bh_high_sigma <- bh_function_w_age(mean_harvest = 0.3, 
+                                       sd_harvest = 0.2, 
+                                       K = K_fixed, 
+                                       alpha = alpha_fixed, 
+                                       sigma = sigma_fixed, 
+                                       ages = chum_ages, 
+                                       p_mean = chum_p_mean) 
+
+data_bh_high_sigma$generating_model <- "Beverton-Holt"
+
+data_bh_high_sigma <- data_bh_high_sigma %>% 
+  filter(!is.nan(ln_RS), !is.infinite(ln_RS))
+
+true_values_bh_high_sigma <- data_bh_high_sigma %>% 
+  group_by(sigma, alpha, K, Smsy) %>% 
+  summarize(min_S = min(S),
+            generating_model = first(generating_model),
+            .groups = "drop") %>% 
+  pivot_longer(cols = c(sigma, alpha, K, Smsy), names_to = "parameter", values_to = "true_value")
+
+
+
+true_values_ric_high_sigma <- data_ric_high_sigma %>% 
+  group_by(sigma, alpha, K, Smsy) %>% 
+  summarize(min_S = min(S),
+            generating_model = first(generating_model),
+            .groups = "drop") %>% 
+  pivot_longer(cols = c(sigma, alpha, K, Smsy), names_to = "parameter", values_to = "true_value")
+
+
+
+model_results_same_pars_df_high_sigma <- data.frame(clones = numeric(),
+                                                   parameter = character(),
+                                                   fitting_model = character(),
+                                                   estimate_median = numeric(),
+                                                   estimate_lower = numeric(),
+                                                   estimate_upper = numeric(),
+                                                   estimate_variance = numeric(),
+                                                   Rhat = numeric(),
+                                                   error = numeric(),
+                                                   true_value = numeric(),
+                                                   generating_model = character())
+
+
+for(k in 1:25){
+  
+  data_ric_cloned_high_sigma <- data_ric_high_sigma %>% 
+    slice(rep(1:n(), each = k)) %>%   # Changed to 'each = k'
+    mutate(clone_id = rep(1:(n()/nrow(data_ric_high_sigma)), each = nrow(data_ric_high_sigma))) 
+  
+  data_bh_cloned_high_sigma <- data_bh_high_sigma %>% 
+    slice(rep(1:n(), each = k)) %>%   # Changed to 'each = k'
+    mutate(clone_id = rep(1:(n()/nrow(data_bh_high_sigma)), each = nrow(data_bh_high_sigma)))
+  
+  
+  data_list_ric <- list(
+    N = nrow(data_ric_cloned_high_sigma),
+    year = data_ric_cloned_high_sigma$year,
+    spawners = data_ric_cloned_high_sigma$S,
+    ln_RS = data_ric_cloned_high_sigma$ln_RS,
+    # forestry = data$forestry,
+    Rk_mean = max(data_ric_cloned_high_sigma$R),
+    Rk_sigma = max(data_ric_cloned_high_sigma$R)*2,
+    Smax_mean = data_ric_cloned_high_sigma$S[which.max(data_ric_cloned_high_sigma$R)],
+    Smax_sigma = data_ric_cloned_high_sigma$S[which.max(data_ric_cloned_high_sigma$R)]*2,
+    prior_alpha = 5
+  )
+  
+  
+  data_list_bh <- list(
+    N = nrow(data_bh_cloned_high_sigma),
+    year = data_bh_cloned_high_sigma$year,
+    spawners = data_bh_cloned_high_sigma$S,
+    ln_RS = data_bh_cloned_high_sigma$ln_RS,
+    # forestry = data$forestry,
+    Rk_mean = max(data_bh_cloned_high_sigma$R),
+    Rk_sigma = max(data_bh_cloned_high_sigma$R)*2,
+    Smax_mean = data_bh_cloned_high_sigma$S[which.max(data_bh_cloned_high_sigma$R)],
+    Smax_sigma = data_bh_cloned_high_sigma$S[which.max(data_bh_cloned_high_sigma$R)]*2,
+    prior_alpha = 5
+  )
+  
+  
+  for(fit_model in fitting_model){
+    
+    
+    set.seed(12345+k)
+    
+    
+    
+    if(fit_model == "Beverton-Holt"){
+      
+      model_sampling_bh <- sim_bh_model$sample(data = data_list_bh,
+                                               iter_sampling  = 2000,
+                                               chains = 6,
+                                               iter_warmup = 1000)
+      
+      model_sampling_ric <- sim_bh_model$sample(data = data_list_ric,
+                                                iter_sampling  = 2000,
+                                                chains = 6,
+                                                iter_warmup = 1000)
+      
+    } else if(fit_model == "Ricker"){
+      
+      model_sampling_bh <- sim_ric_model$sample(data = data_list_bh,
+                                                iter_sampling  = 2000,
+                                                chains = 6,
+                                                iter_warmup = 1000)
+      
+      model_sampling_ric <- sim_ric_model$sample(data = data_list_ric,
+                                                 iter_sampling  = 2000,
+                                                 chains = 6,
+                                                 iter_warmup = 1000)
+      
+      
+    }
+    
+    Rhat_values_ric <- data.frame(Rhat = round(model_sampling_ric$summary()$rhat,3)) %>% 
+      mutate(parameter = model_sampling_ric$summary()$variable)
+    
+    Rhat_values_bh <- data.frame(Rhat = round(model_sampling_bh$summary()$rhat,3)) %>%
+      mutate(parameter = model_sampling_bh$summary()$variable)
+    
+    model_results_ric <- data.frame(model_sampling_ric$draws(variables=c("alpha", "sigma", "K", "Smsy"),format='draws_matrix')) %>%
+      mutate(fitting_model = fit_model, clones = k) %>%
+      select(fitting_model, alpha, sigma, K, Smsy, clones) %>% 
+      pivot_longer(cols = c(alpha, K, sigma, Smsy), names_to = "parameter", values_to = "value") %>%
+      group_by(fitting_model, parameter, clones) %>%
+      summarise(
+        estimate_median = round(median(value),2),
+        estimate_lower = round(quantile(value, 0.025),2),
+        estimate_upper = round(quantile(value, 0.975),2),
+        estimate_variance = round(var(value), 4)
+      ) %>%
+      ungroup() %>% 
+      
+      left_join(true_values_ric, by = "parameter") %>% 
+      left_join(Rhat_values_ric, by = "parameter") %>% 
+      # mutate(data_model = "Ricker") %>% 
+      mutate(error = 100*(estimate_median - true_value)/true_value)
+    
+    model_results_bh <- data.frame(model_sampling_bh$draws(variables=c("alpha", "sigma", "K", "Smsy"),format='draws_matrix')) %>%
+      mutate(fitting_model = fit_model, clones = k) %>%
+      select(fitting_model, alpha, sigma, K, Smsy, clones) %>% 
+      pivot_longer(cols = c(alpha, K, sigma, Smsy), names_to = "parameter", values_to = "value") %>%
+      group_by(fitting_model, parameter, clones) %>%
+      summarise(
+        estimate_median = round(median(value),2),
+        estimate_lower = round(quantile(value, 0.025),2),
+        estimate_upper = round(quantile(value, 0.975),2),
+        estimate_variance = round(var(value), 4)
+      ) %>%
+      ungroup() %>% 
+      
+      left_join(true_values_bh, by = "parameter") %>% 
+      left_join(Rhat_values_bh, by = "parameter") %>% 
+      # mutate(data_model = "Ricker") %>% 
+      mutate(error = 100*(estimate_median - true_value)/true_value)
+    
+    model_results_same_pars_df_high_sigma  <- model_results_same_pars_df_high_sigma  %>%
+      bind_rows(model_results_bh) %>% 
+      bind_rows(model_results_ric)
+    
+    
+  }
+}
+
+model_results_same_pars_df_new_high_sigma <- model_results_same_pars_df_high_sigma %>% 
+  group_by(clones, generating_model, fitting_model) %>%
+  mutate(alpha = true_value[parameter == "alpha"],
+         sigma = true_value[parameter == "sigma"],
+         # b_for = true_value[parameter == "b_for"],
+         Smsy = true_value[parameter == "Smsy"],
+         K = true_value[parameter == "K"]
+  ) %>%
+  mutate(alpha_estimate = estimate_median[parameter == "alpha"],
+         sigma_estimate = estimate_median[parameter == "sigma"],
+         # b_for_estimate = estimate_median[parameter == "b_for"],
+         Smsy_estimate = estimate_median[parameter == "Smsy"],
+         K_estimate = estimate_median[parameter == "K"]
+  ) %>%
+  ungroup() 
+
+
+#save 
+
+write_csv(model_results_same_pars_df_new_high_sigma, here("simulation", "stan_models", "output", "data_cloning_high_sigma.csv"))
+
+
+#scaling variance
+
+scaled_variance_high_sigma <- model_results_same_pars_df_new_high_sigma %>% 
+  select(estimate_variance, parameter, fitting_model, generating_model, clones) %>% 
+  group_by(parameter, fitting_model, generating_model) %>%
+  mutate(scaled_variance = estimate_variance/estimate_variance[clones==1]) %>% 
+  ungroup()
+
+#plot variance as a function of clones
+ggplot(scaled_variance_high_sigma)+
+  # Changed x to 'clones'
+  geom_line(aes(x = clones, y = scaled_variance, group = parameter, 
+                color = parameter), size = 1.2, alpha = 0.5)+
+  geom_point(aes(x = clones, y = scaled_variance, color = parameter), size = 3) +
+  
+  facet_grid(generating_model~fitting_model, scales = "free", labeller = labeller(
+    generating_model = c("Beverton-Holt" = "Generating Model: Beverton-Holt", 
+                         "Ricker" = "Generating Model: Ricker"),
+    fitting_model = c("Beverton-Holt" = "Fitting Model: Beverton-Holt", 
+                      "Ricker" = "Fitting Model: Ricker"))) +
+  
+  # Log scale makes the 1/k curve a straight line, vastly improving readability
+  # scale_x_continuous(trans = "log2", breaks = c(1, 2, 4, 8, 16)) +
+  # scale_y_continuous(trans = "log2", breaks = c(0.001, 0.1, 0.5, 1)) +
+  # 
+  labs(x = "Number of Clones (k)", y = "Scaled Variance", color = "Parameter")+
+  stat_function(
+    fun = function(x) 1/x, 
+    aes(color = "Ideal (1/k)"), 
+    linetype = "dashed", 
+    size = 1,
+    alpha = 0.7
+  ) +
+  scale_color_manual(
+    values = c("Ideal (1/k)" = "black", 
+               "alpha" = "#1B9E77", 
+               "sigma" = "#D95F02", 
+               "K" = "#7570B3", 
+               "Smsy" = "#E7298A"),
+    name = "Parameter"
+  ) +
+  theme_classic()
+
+# read all the data cloning data sets
+
+data_cloning <- read_csv(here("simulation",
+                              "stan_models",
+                              "output",
+                              "data_cloning.csv"))
+
+data_cloning_low_S <- read_csv(here("simulation",
+                              "stan_models",
+                              "output",
+                              "data_cloning_low_S.csv"))
+
+data_cloning_low_sigma <- read_csv(here("simulation",
+                              "stan_models",
+                              "output",
+                              "data_cloning_low_sigma.csv"))
+
+data_cloning_high_sigma <- read_csv(here("simulation",
+                              "stan_models",
+                              "output",
+                              "data_cloning_high_sigma.csv"))
+
+#combine datasets with a column for low sigma, high sigma, low spawner abundance
+
+data_cloning_combined <- rbind(data_cloning %>% mutate(scenario = "base"),
+                               data_cloning_low_S %>% mutate(scenario = "low minimum spawner abundance"),
+                               data_cloning_low_sigma %>% mutate(scenario = "low sigma"),
+                               data_cloning_high_sigma %>% mutate(scenario = "high sigma"))
+
+scaled_variance_combined <- data_cloning_combined  %>% 
+  select(estimate_variance, parameter, fitting_model, generating_model, clones, scenario) %>% 
+  group_by(parameter, fitting_model, generating_model, scenario) %>%
+  mutate(scaled_variance = estimate_variance/estimate_variance[clones==1]) %>% 
+  ungroup()
+
+
+  
+# make one figure for just alpha with multiple lines for the different datasets
+
+#plot variance as a function of clones
+ggplot(scaled_variance_combined %>% filter(parameter == "alpha", clones <30, scenario != "high sigma"))+
+  # Changed x to 'clones'
+  geom_line(aes(x = clones, y = scaled_variance, group = scenario, color = scenario), size = 1.2, alpha = 0.5)+
+  geom_point(aes(x = clones, y = scaled_variance, color = scenario), size = 3) +
+  
+  facet_grid(generating_model~fitting_model, scales = "free", labeller = labeller(
+    generating_model = c("Beverton-Holt" = "Generating Model: Beverton-Holt", 
+                         "Ricker" = "Generating Model: Ricker"),
+    fitting_model = c("Beverton-Holt" = "Fitting Model: Beverton-Holt", 
+                      "Ricker" = "Fitting Model: Ricker"))) +
+  
+  # Log scale makes the 1/k curve a straight line, vastly improving readability
+  # scale_x_continuous(trans = "log2", breaks = c(1, 2, 4, 8, 16)) +
+  # scale_y_continuous(trans = "log2", breaks = c(0.001, 0.1, 0.5, 1)) +
+  # 
+  labs(x = "Number of Clones (k)", y = "Scaled Variance", color = "Parameter")+
+  stat_function(
+    fun = function(x) 1/x, 
+    aes(color = "Ideal (1/k)"), 
+    linetype = "dashed", 
+    size = 1,
+    alpha = 0.7
+  ) +
+  scale_color_manual(
+    values = c("Ideal (1/k)" = "black", 
+               "base" = "gray", 
+               "low sigma" = "#1B9E77", 
+               "low minimum spawner abundance" = "#7570B3"),
+    labels = c("Base",
+               "Ideal (1/k)",
+               "Low Minimum\nSpawner Abundance",
+               "Low Error"
+               ),
+    
+    name = "Scenarios"
+  ) +
+  theme_classic()
+
+
+
+
 
 
 

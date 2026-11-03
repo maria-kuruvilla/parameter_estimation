@@ -31,6 +31,10 @@ library(GGally)
 library(latex2exp)
 library(ggforce)
 library(PNWColors)
+library(DiagrammeR)
+library(DiagrammeRsvg)
+library(rsvg)
+library(magrittr)
 
 pal <- PNWColors::pnw_palette("Starfish", 5)
 
@@ -40,15 +44,14 @@ pal <- PNWColors::pnw_palette("Starfish", 5)
 
 # Introduction
 
-Fish population dynamics models have been used for several decades to describe the relationship between spawner abundance and future recruitment. The parameters in these models are estimated and used to predict the population size in the future, to manage fisheries, and more recently to understand factors (physical, biological, or human) that cause changes in fish populations. However, the parameters in these complex models may not be uniquely identifiable. We used simulations, profile likelihood, and Bayesian hierarchical modelling to check the limitations of commonly used fisheries models, such as the Ricker and the Beverton-Holt model. We provide some guidelines on the most appropriate use cases for these models.
+Fish population dynamics models have been used for several decades to describe the relationship between spawner abundance and future recruitment. The parameters in these models are estimated and used to predict the population size in the future, to manage fisheries, and more recently to understand factors (physical, biological, or anthropogenic) that cause changes in fish populations. However, the parameters in these complex models may not be uniquely identifiable. We used simulations, profile likelihood, and Bayesian hierarchical modelling to check the limitations of commonly used fisheries models, such as the Ricker and the Beverton-Holt model. We provide some guidelines on the most appropriate use cases for these models.
 
 
 
 ## Simulation
 
-<!-- We simulated data for log recruits per spawner $\ln(\frac{R}{S})$, also known as productivity, with the Beverton-Holt equation and the Ricker equation with randomly drawn values of $\alpha$, $\sigma$, $K$, and with empirical spawner data. We then fit both the Beverton-Holt model and the Ricker model in Bayesian framework to this data to estimate the same parameters. We plotted the median estimates of these parameters with  95% credible intervals along with the true values of the parameters to evaluate the accuracy and precision of the parameter estimates.  -->
+We simulated the Beverton-Holt and the Ricker population dynamics with randomly drawn values of $\alpha$, $\sigma$, $K$, and starting population size. We then fit both the Beverton-Holt model and the Ricker model in Bayesian framework to the data for log recruits per spawner $\ln(\frac{R}{S})$ to estimate the same parameters. We plotted the median estimates of these parameters with  95% credible intervals along with the true values of the parameters to evaluate the accuracy and precision of the parameter estimates.
 
-We simulated the population dynamics of salmon using two spawner recruit models - Ricker and Beverton-Holt. The simulation models contained submodels for recruitment, harvest and age-structure, with natural variability in recruitment, harvest, and age-at-maturity.
 
 ### Base model
 
@@ -73,57 +76,129 @@ $S_{MSY} =  (1-W_0(e^{1 - \alpha}))S_{max}$
 $\epsilon \sim N(0,\sigma)$
 
 
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 
-```{r flowchart, echo=FALSE, message=FALSE, warning=FALSE}
-library(DiagrammeR)
-library(DiagrammeRsvg)
-library(rsvg)
-library(magrittr)
+simulation_results_wo_age <- read_csv(here("simulation",
+                                           "stan_models",
+                                           "output",
+                                           "simulation_fitting_results_wo_age_200.csv"))
 
-# 1. Create the graph using Graphviz
-flowchart <- grViz("
-digraph G {
-  graph [layout = dot, rankdir = TD]
 
-  # Default nodes
-  node [shape = box, style = filled, fillcolor = '#f9f9f9', fontname = 'Helvetica', color = '#333333']
-  A [label = 'Start Simulation']
-  B [label = 'Initialize Spawners near K\\nfor t = 1 to maximum spawning age']
-  H [label = 'Discard Burn-in Period,\\n Calculate Derived Benchmarks\\ne.g., MSY']
+ggplot(simulation_results_wo_age %>% 
+         filter(parameter == "alpha"), aes(x = alpha, y = estimate_median)) +
+  # geom_point(aes(color = alpha),alpha = 0.5, size = 2) +
+  geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = sigma), size = 0.5, alpha = 0.5)+
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
+  labs(x = "True alpha", y = "Estimated alpha") +
+  # scale_color_gradient2(name = 'alpha',
+  #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
+  scale_color_gradientn(name = 'sigma',
+                        colors = pal)+
+  theme_classic()
 
-  # Decision nodes (diamonds)
-  node [shape = diamond, fillcolor = '#f9f9f9']
-  C [label = 'Is t > maximum spawning age?']
-  G [label = 'Is Simulation Complete?']
 
-  # Process nodes (blue)
-  node [shape = box, fillcolor = '#e1f5fe', color = '#36a2eb', penwidth = 2]
-  D [label = 'Calculate Run Size:\\nSum returning ages from past brood years']
-  E [label = 'Apply Harvest Rate:\\nCalculate Escapement']
-  F [label = 'Calculate Recruitment:\\nApply Ricker/Beverton-Holt Model with environmental noise']
 
-  # Connect the arrows
-  A -> B
-  B -> C
-  C -> D [label = ' Yes']
-  D -> E
-  C -> F [label = ' No']
-  E -> F
-  F -> G
-  G -> C [label = ' No']
-  G -> H [label = ' Yes']
-}
-")
 
-# 2. Convert the graph to a PNG image and save it to your folder
-export_svg(flowchart) %>% charToRaw() %>% rsvg_png("simulation_flowchart.png")
-
-# 3. Insert the PNG image into the Word document
-knitr::include_graphics("simulation_flowchart.png")
 ```
 
 
-We simulated 100 different datasets and fit both the Ricker model and the Beverton-Holt model to these datasets. We then estimated the parameters and compared them to the true values.
+```{r}
+
+# Create the flowchart using Graphviz (DOT language)
+flowchart <- grViz("
+digraph G {
+  graph [layout = dot, rankdir = TD, nodesep = 0.4, ranksep = 0.5]
+
+  # Global font settings
+  node [fontname = 'Helvetica', style = 'filled', penwidth = 1.5]
+
+  # ---------------------------------------------------
+  # 1. START / STOP (Ovals)
+  # ---------------------------------------------------
+  node [shape = oval, fillcolor = '#e8f5e9', color = '#2e7d32']
+  Start [label = 'Start:\\nSpawner recruitment simulation']
+  End [label = 'End:\\nReturn simulated data']
+
+  # ---------------------------------------------------
+  # 2. INPUT / OUTPUT (Parallelograms)
+  # ---------------------------------------------------
+  node [shape = parallelogram, fillcolor = '#e3f2fd', color = '#1565c0']
+  Input [label = 'Draw and input parameters:\\nspawning ages, carrying capacity, growth rate, etc.']
+
+  # ---------------------------------------------------
+  # 3. DECISIONS (Diamonds)
+  # ---------------------------------------------------
+  node [shape = diamond, fillcolor = '#fff3e0', color = '#ef6c00', margin = 0]
+  CheckLoop [label = 'Are there more\\nyears to simulate?']
+  CheckMaxAge [label = 'Is it an\\ninitial year?']
+  CheckExtinction [label = 'Is population close to extinction (<2 spawners)?']
+
+  # ---------------------------------------------------
+  # 4. PROCESSES (Rounded Rectangles)
+  # ---------------------------------------------------
+  node [shape = box, style = 'filled,rounded', fillcolor = '#f3e5f5', color = '#6a1b9a', margin = 0.2]
+  Prep [label = 'Draw:\\n number of years for simulation, harvest rates, and age proportions']
+  InitLoop [label = 'Start at year 1']
+  DrawNoise [label = 'Add environmental noise']
+  
+  InitS [label = 'Initialize spawners near\\ncarrying capacity']
+  CalcRun [label = 'Calculate run size from past recruits,\\nCalculate spawners after harvest']
+  
+  SetZero [label = 'Set recruitment to 0']
+  CalcBH [label = 'Apply spawner recruitment model']
+  
+  NextT [label = 'Move to next year']
+  
+  PostProc [label = 'Post-Processing:\\nDiscard burn-in years\\nCalculate spanwers for maximum sustainable yield']
+
+  # ---------------------------------------------------
+  # 5. EDGE CONNECTIONS
+  # ---------------------------------------------------
+  Start -> Input
+  Input -> Prep
+  
+  # Setup and Loop Start
+  Prep -> InitLoop
+  InitLoop -> CheckLoop
+  
+  # Inside the Loop
+  CheckLoop -> DrawNoise [label = ' Yes']
+  DrawNoise -> CheckMaxAge
+  
+  # Age Check Branch
+  CheckMaxAge -> InitS [label = ' Yes']
+  CheckMaxAge -> CalcRun [label = ' No']
+  
+  # Extinction Check Branch
+  InitS -> CheckExtinction
+  CalcRun -> CheckExtinction
+  
+  CheckExtinction -> SetZero [label = ' Yes']
+  CheckExtinction -> CalcBH [label = ' No']
+  
+  # End of Loop Iteration
+  SetZero -> NextT
+  CalcBH -> NextT
+  NextT -> CheckLoop
+  
+  # Loop Finished
+  CheckLoop -> PostProc [label = ' No']
+  PostProc -> End
+}
+")
+
+# Convert the graph to a PNG image and save it to your folder
+export_svg(flowchart) %>% charToRaw() %>% rsvg_png("bh_algorithm_flowchart.png")
+
+# Insert the PNG image into the Word document
+knitr::include_graphics("bh_algorithm_flowchart.png")
+
+```
+
+We simulated the population dynamics of salmon using two spawner recruit models - Ricker and Beverton-Holt. The simulation models contained submodels for recruitment, harvest and age-structure, with natural variability in recruitment, harvest, and age-at-maturity.
+
+We simulated 300 different datasets and fit both the Ricker model and the Beverton-Holt model to these datasets. We then estimated the parameters and compared them to the true values.
 
 
 
@@ -412,12 +487,86 @@ ggplot(scaled_variance )+
 
 
 
+data_cloning <- read_csv(here("simulation",
+                              "stan_models",
+                              "output",
+                              "data_cloning.csv"))
+
+data_cloning_low_S <- read_csv(here("simulation",
+                              "stan_models",
+                              "output",
+                              "data_cloning_low_S.csv"))
+
+data_cloning_low_sigma <- read_csv(here("simulation",
+                              "stan_models",
+                              "output",
+                              "data_cloning_low_sigma.csv"))
+
+data_cloning_high_sigma <- read_csv(here("simulation",
+                              "stan_models",
+                              "output",
+                              "data_cloning_high_sigma.csv"))
+
+#combine datasets with a column for low sigma, high sigma, low spawner abundance
+
+data_cloning_combined <- rbind(data_cloning %>% mutate(scenario = "base"),
+                               data_cloning_low_S %>% mutate(scenario = "low minimum spawner abundance"),
+                               data_cloning_low_sigma %>% mutate(scenario = "low sigma"),
+                               data_cloning_high_sigma %>% mutate(scenario = "high sigma"))
+
+scaled_variance_combined <- data_cloning_combined  %>% 
+  select(estimate_variance, parameter, fitting_model, generating_model, clones, scenario) %>% 
+  group_by(parameter, fitting_model, generating_model, scenario) %>%
+  mutate(scaled_variance = estimate_variance/estimate_variance[clones==1]) %>% 
+  ungroup()
+
+
+  
+# make one figure for just alpha with multiple lines for the different datasets
+
+#plot variance as a function of clones
+ggplot(scaled_variance_combined %>% filter(parameter == "alpha", clones <30, scenario != "high sigma"))+
+  # Changed x to 'clones'
+  geom_line(aes(x = clones, y = scaled_variance, group = scenario, color = scenario), size = 1.2, alpha = 0.5)+
+  geom_point(aes(x = clones, y = scaled_variance, color = scenario), size = 3) +
+  
+  facet_grid(generating_model~fitting_model, scales = "free", labeller = labeller(
+    generating_model = c("Beverton-Holt" = "Generating Model: Beverton-Holt", 
+                         "Ricker" = "Generating Model: Ricker"),
+    fitting_model = c("Beverton-Holt" = "Fitting Model: Beverton-Holt", 
+                      "Ricker" = "Fitting Model: Ricker"))) +
+  
+  # Log scale makes the 1/k curve a straight line, vastly improving readability
+  # scale_x_continuous(trans = "log2", breaks = c(1, 2, 4, 8, 16)) +
+  # scale_y_continuous(trans = "log2", breaks = c(0.001, 0.1, 0.5, 1)) +
+  # 
+  labs(x = "Number of Clones (k)", y = "Scaled Variance", color = "Parameter")+
+  stat_function(
+    fun = function(x) 1/x, 
+    aes(color = "Ideal (1/k)"), 
+    linetype = "dashed", 
+    size = 1,
+    alpha = 0.7
+  ) +
+  scale_color_manual(
+    values = c("Ideal (1/k)" = "black", 
+               "base" = "gray", 
+               "low sigma" = "#1B9E77", 
+               "low minimum spawner abundance" = "#7570B3"),
+    labels = c("Base",
+               "Ideal (1/k)",
+               "Low Minimum\nSpawner Abundance",
+               "Low Error"
+               ),
+    
+    name = "Scenarios"
+  ) +
+  theme_classic()
+
 
 
 
 ```
-
-
 
 
 <!-- To do: -->
@@ -436,6 +585,31 @@ Profile likelihood is a statistical tool that can be used to determine whether a
 
 
 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+profile_df_alpha <- read_csv(here("profile_likelihoods",
+                              "output",
+                              "profile_likelihood_alpha.csv"))
+alpha <- 1.505
+ggplot() +
+  geom_line(data = profile_df_alpha, aes(x = alpha, y = nll_ricker - min(nll_ricker), color = "Ricker"), size = 1, alpha = 0.5) +
+  geom_line(data = profile_df_alpha, aes(x = alpha, y = nll_bh - min(nll_bh), color = "BH"), size = 1, alpha = 0.5) +
+  #add horizontal line at confidence interval
+  geom_hline(yintercept = qchisq(0.95, df = 1) / 2, linetype = "dashed", color = "gray", size = 0.75) +
+  scale_color_manual(values = c("BH" = "#7F719F", "Ricker" = "#7CAE7A"), name = "Model")+
+  geom_vline(xintercept = alpha, linetype = "dashed", color = "cadetblue", size = 0.75) +
+  labs(title = "Profile likelihood for alpha",
+       x = "Alpha",
+       y = "Negative Log Likelihood") +
+  annotate("text", x = alpha-0.2, y = 50, label = "True alpha", color = "cadetblue", angle = 90) +
+  annotate("text", x = 4, y = qchisq(0.95, df = 1)/2 + 2 , label = "95% CI threshold", 
+           color = "gray", angle = 0) +
+  theme_classic()
+
+
+
+```
 
 
 ## Significance
