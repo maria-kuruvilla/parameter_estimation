@@ -766,7 +766,7 @@ model_results_w_spawner_combined_df_new <- model_results_w_spawner_combined_df %
 write_csv(model_results_w_spawner_combined_df_new, here("simulation",
                                                         "stan_models",
                                                         "output",
-                                                        paste0("simulation_fitting_results_w_covariate_forestry_",nsims,".csv")))
+                                                        paste0("simulation_fitting_results_w_covariate_forestry_msy_",nsims,".csv")))
 
 
 
@@ -774,6 +774,49 @@ if(Sys.info()[1] == "Windows") {
   
   
   pal <- PNWColors::pnw_palette("Starfish", 5)
+  
+  
+  simulation_results_diff_pars_w_covariate <- read_csv(here("simulation",
+                                                            "stan_models",
+                                                            "output",
+                                                            "simulation_fitting_results_w_covariate_sst_100.csv"))
+  
+  
+  # ggplot(simulation_results_diff_pars_w_covariate %>% 
+  #          filter(parameter == "alpha"), aes(x = alpha, y = estimate_median)) +
+  #   # geom_point(aes(color = alpha),alpha = 0.5, size = 2) +
+  #   geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = sigma), size = 0.5, alpha = 0.5)+
+  #   geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  #   facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
+  #   labs(x = "True alpha", y = "Estimated alpha") +
+  #   # scale_color_gradient2(name = 'alpha',
+  #   #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
+  #   scale_color_gradientn(name = 'sigma',
+  #                         colors = pal)+
+  #   theme_classic()
+  
+  
+  ggplot(simulation_results_diff_pars_w_covariate %>% 
+           filter(parameter == "b_cov"), aes(x = b_cov, y = estimate_median)) +
+    # geom_point(aes(color = alpha),alpha = 0.5, size = 2) +
+    geom_pointrange(aes(ymin= estimate_lower, ymax = estimate_upper, color = sigma), size = 0.5, alpha = 0.5)+
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    facet_wrap(~ paste("Data model: ",generating_model) + paste("Fitting model: ",fitting_model)) +
+    labs(x = "True beta", y = "Estimated beta") +
+    # scale_color_gradient2(name = 'alpha',
+    #                       low = pal[2], mid = 'gray', high = pal[4], midpoint = 5) +
+    scale_color_gradientn(name = 'sigma',
+                          colors = pal)+
+    theme_classic()
+  
+  #save
+  
+  ggsave(here("simulation",
+              "figures",
+              "simulation_fitting_results_w_covariate_sst_sim_100_b_cov.png"), width = 8, height = 6)
+  
+  
+  
   
   ggplot(model_results_w_spawner_combined_df_new %>% 
            filter(parameter == "alpha"), aes(x = alpha, y = estimate_median)) +
