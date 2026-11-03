@@ -127,6 +127,9 @@ bh_function_w_age <- function(mean_harvest, sd_harvest, K, alpha, sigma, ages, p
   
   R_S_final$Smsy <- R_S_final$K/(exp(R_S_final$alpha/2)+1)
   
+  R_S_final$msy <- R_S_final$K*(exp(R_S_final$alpha/2) - 1)/(exp(R_S_final$alpha/2) + 1)
+  R_S_final$Umsy <- 1 - exp(-R_S_final$alpha/2)
+  
   return(R_S_final)
   
 }
@@ -233,6 +236,9 @@ ric_function_w_age <- function(mean_harvest, sd_harvest, K, alpha, sigma, ages, 
   
   R_S_final$Smsy <- (1-lambert_W0(exp(1-R_S_final$alpha)))*R_S_final$K/R_S_final$alpha
   
+  R_S_final$msy <- (R_S_final$Smsy* exp(R_S_final$alpha - R_S_final$Smsy/Smax)) - R_S_final$Smsy
+  R_S_final$Umsy <- R_S_final$msy/(R_S_final$Smsy + R_S_final$msy)
+  
   return(R_S_final)
   
 }
@@ -282,305 +288,228 @@ chum_p_mean <- c(0.15, 0.65, 0.18, 0.02)
 ages <- chum_ages
 p_mean <- chum_p_mean
 
-# alpha_mean = 1.5
-# 
-# sigma_mean = 1
-# 
-# K_max = 10000
-# 
-# #Random K
-# K = sample(seq(0.8 * K_max, K_max), 1)
-# 
-# alpha_sample <- rnorm(100, alpha_mean, sd = 1)
-# 
-# alpha <- sample(alpha_sample[alpha_sample > 0 & alpha_sample < 10], 1)
-# 
-# sigma_sample <- rnorm(100, sigma_mean, 1)
-# 
-# sigma <- sample(sigma_sample[sigma_sample > 0 & sigma_sample < 2], 1)
-# 
-# bh_data <- bh_function_w_age(mean_harvest = 0.3, 
-#                              sd_harvest = 0.2, 
-#                              K = K, 
-#                              alpha = alpha, 
-#                              sigma = sigma, 
-#                              ages = chum_ages, 
-#                              p_mean = chum_p_mean)
-# 
-# bh_data$generating_model <- "Beverton-Holt"
-# 
-# ric_data <- ric_function_w_age(mean_harvest = 0.3, 
-#                                sd_harvest = 0.2, 
-#                                K = K, 
-#                                alpha = alpha, 
-#                                sigma = sigma, 
-#                                ages = chum_ages, 
-#                                p_mean = chum_p_mean)
-# 
-# ric_data$generating_model <- "Ricker"
-# 
-# data <- ric_data %>%
-#   filter(!is.nan(ln_RS), !is.infinite(ln_RS)) %>%
-#   rbind(bh_data %>% filter(!is.nan(ln_RS), !is.infinite(ln_RS)))
-# 
-# data <- NULL
-
-
-# 
-# for(i in 1:nsims){
-#   
-#   set.seed(12345+i)
-#   bh_data <- bh_function_w_age(mean_harvest = 0.3, 
-#                                sd_harvest = 0.2, 
-#                                K_max = 10000, 
-#                                alpha_mean = 1.5, 
-#                                sigma_mean = 1, 
-#                                ages = chum_ages, 
-#                                p_mean = chum_p_mean)
-#   
-#   bh_data$generating_model <- "Beverton-Holt"
-#   bh_data$sim <- i
-#   
-#   ric_data <- ric_function_w_age(mean_harvest = 0.3, 
-#                                  sd_harvest = 0.2, 
-#                                  K_max = 10000, 
-#                                  alpha_mean = 1.5, 
-#                                  sigma_mean = 1, 
-#                                  ages = chum_ages, 
-#                                  p_mean = chum_p_mean)
-#   
-#   ric_data$generating_model <- "Ricker"
-#   ric_data$sim <- i
-#   
-#   data <- data %>% 
-#     rbind(ric_data %>% filter(!is.nan(ln_RS), !is.infinite(ln_RS))) %>% 
-#     rbind(bh_data %>% filter(!is.nan(ln_RS), !is.infinite(ln_RS)))
-#   
-#   
-# }
-# 
 
 generating_model <- c("Beverton-Holt", "Ricker")
 fitting_model <- c("Beverton-Holt", "Ricker")
 
-sim_ric_model <- stan_model(file = here("simulation",
-                                        "stan_models",
-                                        "code",
-                                        "ric_simple_model_for_simulated_data.stan"))
+# sim_ric_model <- stan_model(file = here("simulation",
+#                                         "stan_models",
+#                                         "code",
+#                                         "ric_simple_model_for_simulated_data.stan"))
+# 
+# sim_bh_model <- stan_model(file = here("simulation",
+#                                        "stan_models",
+#                                        "code",
+#                                        "bh_simple_model_for_simulated_data.stan"))
+# 
+# model_results_w_spawner_combined_df <- data.frame(simulation = numeric(),
+#                                                   generating_model = character(),
+#                                                   parameter = character(),
+#                                                   true_value = numeric(),
+#                                                   fitting_model = character(),
+#                                                   estimate_median = numeric(),
+#                                                   estimate_lower = numeric(),
+#                                                   estimate_upper = numeric(),
+#                                                   Rhat = numeric(),
+#                                                   error = numeric())
 
-sim_bh_model <- stan_model(file = here("simulation",
-                                       "stan_models",
-                                       "code",
-                                       "bh_simple_model_for_simulated_data.stan"))
-
-model_results_w_spawner_combined_df <- data.frame(simulation = numeric(),
-                                                  generating_model = character(),
-                                                  parameter = character(),
-                                                  true_value = numeric(),
-                                                  fitting_model = character(),
-                                                  estimate_median = numeric(),
-                                                  estimate_lower = numeric(),
-                                                  estimate_upper = numeric(),
-                                                  Rhat = numeric(),
-                                                  error = numeric())
-
-# sample in parallel
-
-options(mc.cores = parallel::detectCores())
-
-nsims <- 500
-
-for(i in 1:nsims){
-  
-  set.seed(12345+i)
-  
-  alpha_mean = 1.5
-  
-  sigma_mean = 1
-  
-  K_max = 10000
-  
-  #Random K
-  K = sample(seq(0.8 * K_max, K_max), 1)
-  
-  alpha_sample <- rnorm(100, alpha_mean, sd = 1)
-  
-  alpha <- sample(alpha_sample[alpha_sample > 0 & alpha_sample < 10], 1)
-  
-  sigma_sample <- rnorm(100, sigma_mean, 1)
-  
-  sigma <- sample(sigma_sample[sigma_sample > 0 & sigma_sample < 2], 1)
-  
-  model <- sample(generating_model, 1)
-  
-  if(model == "Beverton-Holt"){
-    
-    data <- bh_function_w_age(mean_harvest = 0.3, 
-                              sd_harvest = 0.2, 
-                              K = K, 
-                              alpha = alpha, 
-                              sigma = sigma, 
-                              ages = chum_ages, 
-                              p_mean = chum_p_mean)
-    
-    data$generating_model <- "Beverton-Holt"
-    
-  } else{
-    
-    data <- ric_function_w_age(mean_harvest = 0.3, 
-                              sd_harvest = 0.2, 
-                              K = K, 
-                              alpha = alpha, 
-                              sigma = sigma, 
-                              ages = chum_ages, 
-                              p_mean = chum_p_mean)
-    
-    data$generating_model <- "Ricker"
-    
-  }
-  
-  data <- data %>% 
-        filter(!is.nan(ln_RS), !is.infinite(ln_RS))
-  
-  #if data has <2 rows, then go to next simulation
-  if(nrow(data) < 2){
-    next
-  }
-  
-  
-  true_values <- data %>% 
-    # group_by(sigma, alpha, K, Smsy) %>% 
-    summarize(sigma = mean(sigma), 
-              # forestry_effect = mean(forestry_effect), 
-              alpha = mean(alpha), 
-              # Smax = mean(Smax),
-              # Rk = mean(Rk),
-              K = mean(K),
-              Smsy = mean(Smsy),
-              generating_model = first(generating_model)) %>% 
-    pivot_longer(cols = c(sigma, alpha, K, Smsy), names_to = "parameter", values_to = "true_value")
-    
-  
-  data_list <- list(
-    N = nrow(data),
-    year = data$year,
-    spawners = data$S,
-    ln_RS = data$ln_RS,
-    # forestry = data$forestry,
-    Rk_mean = max(data$R),
-    Rk_sigma = max(data$R)*2,
-    Smax_mean = data$S[which.max(data$R)],
-    Smax_sigma = data$S[which.max(data$R)]*2,
-    prior_alpha = 5
-  )
-  for(fit_model in fitting_model){
-    
-    
-    set.seed(12345+i)
-    
-    
-    
-    if(fit_model == "Beverton-Holt"){
-      
-      model_sampling <- rstan::sampling(sim_bh_model,
-                                                   data = data_list,
-                                                   iter = 2000,
-                                                   chains = 6,
-                                                   warmup = 1000,
-                                                   verbose = FALSE)
-      
-      
-      
-      
-      
-    } else if(fit_model == "Ricker"){
-      
-      model_sampling <- rstan::sampling(sim_ric_model,
-                                                   data = data_list,
-                                                   iter = 2000,
-                                                   chains = 6,
-                                                   warmup = 1000,
-                                                   verbose = FALSE)
-      
-      
-      
-      
-      
-      
-    }
-    
-    Rhat_values <- data.frame(Rhat = round(summary(model_sampling)$summary[,"Rhat"],3)) %>% 
-      rownames_to_column("parameter")
-    
-    
-    model_results <- tidybayes::spread_draws(model_sampling, alpha, sigma, K, Smsy) %>%
-      mutate(fitting_model = fit_model, simulation = i) %>%
-      select(fitting_model, alpha, sigma, K, Smsy, simulation) %>% 
-      pivot_longer(cols = c(alpha, K, sigma, Smsy), names_to = "parameter", values_to = "value") %>%
-      group_by(fitting_model, parameter, simulation) %>%
-      summarise(
-        estimate_median = round(median(value),2),
-        estimate_lower = round(quantile(value, 0.025),2),
-        estimate_upper = round(quantile(value, 0.975),2)
-      ) %>%
-      ungroup() %>% 
-      
-      left_join(true_values, by = "parameter") %>% 
-      left_join(Rhat_values, by = "parameter") %>% 
-      # mutate(data_model = "Ricker") %>% 
-      mutate(error = 100*(estimate_median - true_value)/true_value)
-    
-    
-    
-    # print(true_values)
-    
-    
-    
-    
-    
-    model_results_w_spawner_combined_df <- model_results_w_spawner_combined_df %>%
-      bind_rows(model_results)
-  }
-  
-  
-}
-
-
-#make a column of simulation number from 1 to i and repeat the each number 8 times
-
-simulation <- NULL
-for(z in 1:(i-1)){
-  
-  zz <- rep(z,8)
-  simulation[((z-1)*8 +1):(z*8)] <- zz
-  
-}
-model_results_w_spawner_combined_df$simulation <- simulation
-
-model_results_w_spawner_combined_df_new <- model_results_w_spawner_combined_df %>% 
-  group_by(simulation, generating_model, fitting_model) %>%
-  mutate(alpha = true_value[parameter == "alpha"],
-         sigma = true_value[parameter == "sigma"],
-         # b_for = true_value[parameter == "b_for"],
-         Smsy = true_value[parameter == "Smsy"],
-         K = true_value[parameter == "K"]
-         ) %>%
-  mutate(alpha_estimate = estimate_median[parameter == "alpha"],
-         sigma_estimate = estimate_median[parameter == "sigma"],
-         # b_for_estimate = estimate_median[parameter == "b_for"],
-         Smsy_estimate = estimate_median[parameter == "Smsy"],
-         K_estimate = estimate_median[parameter == "K"]
-         ) %>%
-  ungroup() 
-
-
-
-
-write_csv(model_results_w_spawner_combined_df_new, here("simulation",
-                                                        "stan_models",
-                                                        "output",
-                                                        "simulation_fitting_results_w_age_sim_383.csv"))
-
+# # sample in parallel
+# 
+# options(mc.cores = parallel::detectCores())
+# 
+# nsims <- 500
+# 
+# for(i in 1:nsims){
+#   
+#   set.seed(12345+i)
+#   
+#   alpha_mean = 1.5
+#   
+#   sigma_mean = 1
+#   
+#   K_max = 10000
+#   
+#   #Random K
+#   K = sample(seq(0.8 * K_max, K_max), 1)
+#   
+#   alpha_sample <- rnorm(100, alpha_mean, sd = 1)
+#   
+#   alpha <- sample(alpha_sample[alpha_sample > 0 & alpha_sample < 10], 1)
+#   
+#   sigma_sample <- rnorm(100, sigma_mean, 1)
+#   
+#   sigma <- sample(sigma_sample[sigma_sample > 0 & sigma_sample < 2], 1)
+#   
+#   model <- sample(generating_model, 1)
+#   
+#   if(model == "Beverton-Holt"){
+#     
+#     data <- bh_function_w_age(mean_harvest = 0.3, 
+#                               sd_harvest = 0.2, 
+#                               K = K, 
+#                               alpha = alpha, 
+#                               sigma = sigma, 
+#                               ages = chum_ages, 
+#                               p_mean = chum_p_mean)
+#     
+#     data$generating_model <- "Beverton-Holt"
+#     
+#   } else{
+#     
+#     data <- ric_function_w_age(mean_harvest = 0.3, 
+#                               sd_harvest = 0.2, 
+#                               K = K, 
+#                               alpha = alpha, 
+#                               sigma = sigma, 
+#                               ages = chum_ages, 
+#                               p_mean = chum_p_mean)
+#     
+#     data$generating_model <- "Ricker"
+#     
+#   }
+#   
+#   data <- data %>% 
+#         filter(!is.nan(ln_RS), !is.infinite(ln_RS))
+#   
+#   #if data has <2 rows, then go to next simulation
+#   if(nrow(data) < 2){
+#     next
+#   }
+#   
+#   
+#   true_values <- data %>% 
+#     # group_by(sigma, alpha, K, Smsy) %>% 
+#     summarize(sigma = mean(sigma), 
+#               # forestry_effect = mean(forestry_effect), 
+#               alpha = mean(alpha), 
+#               # Smax = mean(Smax),
+#               # Rk = mean(Rk),
+#               K = mean(K),
+#               Smsy = mean(Smsy),
+#               generating_model = first(generating_model)) %>% 
+#     pivot_longer(cols = c(sigma, alpha, K, Smsy), names_to = "parameter", values_to = "true_value")
+#     
+#   
+#   data_list <- list(
+#     N = nrow(data),
+#     year = data$year,
+#     spawners = data$S,
+#     ln_RS = data$ln_RS,
+#     # forestry = data$forestry,
+#     Rk_mean = max(data$R),
+#     Rk_sigma = max(data$R)*2,
+#     Smax_mean = data$S[which.max(data$R)],
+#     Smax_sigma = data$S[which.max(data$R)]*2,
+#     prior_alpha = 5
+#   )
+#   for(fit_model in fitting_model){
+#     
+#     
+#     set.seed(12345+i)
+#     
+#     
+#     
+#     if(fit_model == "Beverton-Holt"){
+#       
+#       model_sampling <- rstan::sampling(sim_bh_model,
+#                                                    data = data_list,
+#                                                    iter = 2000,
+#                                                    chains = 6,
+#                                                    warmup = 1000,
+#                                                    verbose = FALSE)
+#       
+#       
+#       
+#       
+#       
+#     } else if(fit_model == "Ricker"){
+#       
+#       model_sampling <- rstan::sampling(sim_ric_model,
+#                                                    data = data_list,
+#                                                    iter = 2000,
+#                                                    chains = 6,
+#                                                    warmup = 1000,
+#                                                    verbose = FALSE)
+#       
+#       
+#       
+#       
+#       
+#       
+#     }
+#     
+#     Rhat_values <- data.frame(Rhat = round(summary(model_sampling)$summary[,"Rhat"],3)) %>% 
+#       rownames_to_column("parameter")
+#     
+#     
+#     model_results <- tidybayes::spread_draws(model_sampling, alpha, sigma, K, Smsy) %>%
+#       mutate(fitting_model = fit_model, simulation = i) %>%
+#       select(fitting_model, alpha, sigma, K, Smsy, simulation) %>% 
+#       pivot_longer(cols = c(alpha, K, sigma, Smsy), names_to = "parameter", values_to = "value") %>%
+#       group_by(fitting_model, parameter, simulation) %>%
+#       summarise(
+#         estimate_median = round(median(value),2),
+#         estimate_lower = round(quantile(value, 0.025),2),
+#         estimate_upper = round(quantile(value, 0.975),2)
+#       ) %>%
+#       ungroup() %>% 
+#       
+#       left_join(true_values, by = "parameter") %>% 
+#       left_join(Rhat_values, by = "parameter") %>% 
+#       # mutate(data_model = "Ricker") %>% 
+#       mutate(error = 100*(estimate_median - true_value)/true_value)
+#     
+#     
+#     
+#     # print(true_values)
+#     
+#     
+#     
+#     
+#     
+#     model_results_w_spawner_combined_df <- model_results_w_spawner_combined_df %>%
+#       bind_rows(model_results)
+#   }
+#   
+#   
+# }
+# 
+# 
+# #make a column of simulation number from 1 to i and repeat the each number 8 times
+# 
+# simulation <- NULL
+# for(z in 1:(i-1)){
+#   
+#   zz <- rep(z,8)
+#   simulation[((z-1)*8 +1):(z*8)] <- zz
+#   
+# }
+# model_results_w_spawner_combined_df$simulation <- simulation
+# 
+# model_results_w_spawner_combined_df_new <- model_results_w_spawner_combined_df %>% 
+#   group_by(simulation, generating_model, fitting_model) %>%
+#   mutate(alpha = true_value[parameter == "alpha"],
+#          sigma = true_value[parameter == "sigma"],
+#          # b_for = true_value[parameter == "b_for"],
+#          Smsy = true_value[parameter == "Smsy"],
+#          K = true_value[parameter == "K"]
+#          ) %>%
+#   mutate(alpha_estimate = estimate_median[parameter == "alpha"],
+#          sigma_estimate = estimate_median[parameter == "sigma"],
+#          # b_for_estimate = estimate_median[parameter == "b_for"],
+#          Smsy_estimate = estimate_median[parameter == "Smsy"],
+#          K_estimate = estimate_median[parameter == "K"]
+#          ) %>%
+#   ungroup() 
+# 
+# 
+# 
+# 
+# write_csv(model_results_w_spawner_combined_df_new, here("simulation",
+#                                                         "stan_models",
+#                                                         "output",
+#                                                         "simulation_fitting_results_w_age_sim_383.csv"))
+# 
 
 
 if(Sys.info()[1] == "Windows") {
@@ -656,15 +585,15 @@ if(Sys.info()[7] == "mariakur") {
   set_cmdstan_path("/home/mkuruvil/R_Packages/cmdstan-2.35.0")
 }
 
-sim_ric_model <- cmdstanr::cmdstan_model(file = here("simulation",
+sim_ric_model <- cmdstanr::cmdstan_model(file.path(here("simulation",
                                         "stan_models",
                                         "code",
-                                        "ric_simple_model_for_simulated_data.stan"))
+                                        "ric_simple_model_for_simulated_data.stan")))
 
-sim_bh_model <- cmdstanr::cmdstan_model(file = here("simulation",
+sim_bh_model <- cmdstanr::cmdstan_model(file.path(here("simulation",
                                        "stan_models",
                                        "code",
-                                       "bh_simple_model_for_simulated_data.stan"))
+                                       "bh_simple_model_for_simulated_data.stan")))
 
 model_results_w_spawner_combined_df <- data.frame(simulation = numeric(),
                                                   generating_model = character(),
@@ -750,8 +679,10 @@ for(i in 1:nsims){
               # Rk = mean(Rk),
               K = mean(K),
               Smsy = mean(Smsy),
+              msy = mean(msy),
+              Umsy = mean(Umsy),
               generating_model = first(generating_model)) %>% 
-    pivot_longer(cols = c(sigma, alpha, K, Smsy), names_to = "parameter", values_to = "true_value")
+    pivot_longer(cols = c(sigma, alpha, K, Smsy, msy, Umsy), names_to = "parameter", values_to = "true_value")
   
   
   data_list <- list(
@@ -776,10 +707,9 @@ for(i in 1:nsims){
     if(fit_model == "Beverton-Holt"){
       
       model_sampling <- sim_bh_model$sample(data = data_list,
-                                        iter = 2000,
-                                        chains = 6,
-                                        warmup = 1000,
-                                        verbose = FALSE)
+                                            iter_sampling  = 2000,
+                                            chains = 6,
+                                            iter_warmup = 1000)
       
       
       
@@ -788,10 +718,9 @@ for(i in 1:nsims){
     } else if(fit_model == "Ricker"){
       
       model_sampling <- sim_ric_model$sample(data = data_list,
-                                        iter = 2000,
-                                        chains = 6,
-                                        warmup = 1000,
-                                        verbose = FALSE)
+                                             iter_sampling  = 2000,
+                                             chains = 6,
+                                             iter_warmup = 1000)
       
       
       
@@ -800,15 +729,15 @@ for(i in 1:nsims){
       
     }
     
-    Rhat_values <- data.frame(Rhat = round(summary(model_sampling)$summary[,"Rhat"],3)) %>% 
-      rownames_to_column("parameter")
+    Rhat_values <- data.frame(Rhat = round(model_sampling$summary()$rhat,3)) %>% 
+      mutate(parameter = model_sampling$summary()$variable)
     
     
-    model_results <- tidybayes::spread_draws(model_sampling, alpha, sigma, K, Smsy) %>%
-      mutate(fitting_model = fit_model, simulation = i) %>%
-      select(fitting_model, alpha, sigma, K, Smsy, simulation) %>% 
-      pivot_longer(cols = c(alpha, K, sigma, Smsy), names_to = "parameter", values_to = "value") %>%
-      group_by(fitting_model, parameter) %>%
+    model_results <- data.frame(model_sampling$draws(variables=c("alpha", "sigma", "K", "Smsy", "msy", "Umsy"),format='draws_matrix')) %>%
+      mutate(fitting_model = fit_model, simulation = i) %>% 
+      select(fitting_model, alpha, sigma, K, Smsy, msy, Umsy, simulation) %>% 
+      pivot_longer(cols = c(alpha, K, sigma, Smsy, msy, Umsy), names_to = "parameter", values_to = "value") %>%
+      group_by(fitting_model, parameter, simulation) %>%
       summarise(
         estimate_median = round(median(value),2),
         estimate_lower = round(quantile(value, 0.025),2),
@@ -835,6 +764,33 @@ for(i in 1:nsims){
   
   
 }
+
+model_results_w_spawner_combined_df_new <- model_results_w_spawner_combined_df %>% 
+  group_by(simulation, generating_model, fitting_model) %>%
+  mutate(alpha = true_value[parameter == "alpha"],
+         sigma = true_value[parameter == "sigma"],
+         # b_for = true_value[parameter == "b_for"],
+         Smsy = true_value[parameter == "Smsy"],
+         msy = true_value[parameter == "msy"],
+         Umsy = true_value[parameter == "Umsy"],
+         K = true_value[parameter == "K"]
+  ) %>%
+  mutate(alpha_estimate = estimate_median[parameter == "alpha"],
+         sigma_estimate = estimate_median[parameter == "sigma"],
+         # b_for_estimate = estimate_median[parameter == "b_for"],
+         Smsy_estimate = estimate_median[parameter == "Smsy"],,
+         msy_estimate = estimate_median[parameter == "msy"],
+         Umsy_estimate = estimate_median[parameter == "Umsy"],
+         K_estimate = estimate_median[parameter == "K"]
+  ) %>%
+  ungroup() 
+
+
+write_csv(model_results_w_spawner_combined_df_new, here("simulation",
+                                                        "stan_models",
+                                                        "output",
+                                                        paste0("simulation_fitting_results_w_age_sim_",nsims,".csv")))
+
 
 
 
